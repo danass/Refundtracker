@@ -73,8 +73,7 @@ export default function FinanceTable({ refundRequests, actorName }) {
   return (
     <form action={dispatch}>
       <input type="hidden" name="selectedIds" value={selectedRequests.join(',')} />
-      <input type="hidden" name="actorName" value={actorName || 'Finance User'} /> 
-
+      <input type="hidden" name="actorName" value={actorName || 'Finance User'} />
       {selectedRequests.length > 0 && (
         <div className="my-4 p-4 bg-slate-100 rounded-md flex items-center gap-4">
           <p className="text-sm font-medium">{selectedRequests.length} request(s) selected for payment processing.</p> {/* Changed text */}
@@ -106,7 +105,7 @@ export default function FinanceTable({ refundRequests, actorName }) {
             {refundRequests.map((request) => {
               const isEligibleForBulkProcess = request.status === 'APPROVED_FOR_PAYMENT';
               return (
-                <Link key={request.id} href={`/refunds/${request.id}?simulatedRole=finance`} legacyBehavior passHref>
+                <Link key={request.id} href={`/refunds/${request.id}?simulatedRole=finance`}  passHref>
                   <tr className={`hover:bg-slate-100 cursor-pointer ${selectedRequests.includes(request.id) ? 'bg-blue-50 hover:bg-blue-100' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <Checkbox 

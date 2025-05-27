@@ -53,11 +53,9 @@ export default function LeadDashboard({ searchParams: searchParamsProp }) { // R
   return (
     <div className="p-4 md:p-6 lg:p-8">
       <h1 className="text-2xl md:text-3xl font-bold text-slate-800 mb-6">Team Lead Dashboard</h1>
-      
       <h2 className="text-xl font-semibold text-slate-700 mb-4">
         Requests Awaiting Your Approval
       </h2>
-      
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
           <p className="font-bold">Error</p>

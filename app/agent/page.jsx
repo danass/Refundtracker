@@ -67,7 +67,7 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
     <div className="p-4 md:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl md:text-3xl font-bold text-slate-800">Agent Dashboard - Refunds</h1>
-        <Link href="/agent/new-refund">
+        <Link href="/agent/new-refund" >
           <Button variant="default" className="bg-slate-800 hover:bg-slate-900 text-white">
             + New Refund Request
           </Button>

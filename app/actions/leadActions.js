@@ -3,7 +3,6 @@
 import { prisma } from '@/lib/prisma.js';
 import { RefundStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
-// import { SUPERVISOR_APPROVAL_THRESHOLD } from '../../lib/constants.js';
 
 // Helper to create audit logs consistently
 async function createAuditLog(refundRequestId, actorRole, actorName, actionDescription, previousStatus, newStatus, fieldChanges) {
@@ -31,8 +30,6 @@ function revalidateRelevantPaths(refundRequestId, role) {
 }
 
 const LEAD_REJECTION_LIMIT = 5000; // Example: Leads can reject up to $5000
-
-// export const SUPERVISOR_APPROVAL_THRESHOLD = 1000; // Refunds over this amount go to supervisor
 
 // Team Lead Action: Approve
 export async function leadApprove(prevState, formData) {

@@ -123,13 +123,10 @@ export default function SupervisorDashboard({ searchParams: searchParamsProp }) 
   return (
     <div className="p-4 md:p-6 lg:p-8">
       <h1 className="text-2xl md:text-3xl font-bold text-slate-800 mb-6">Supervisor Dashboard</h1>
-      
       <h2 className="text-xl font-semibold text-slate-700 mb-4">
         Requests for Final Approval
       </h2>
-
       {error && <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded-md">Error loading data: {error}</div>}
-
       <form action={bulkActionDispatch}>
         <input type="hidden" name="selectedIds" value={selectedRequests.join(',')} />
         <input type="hidden" name="actorName" value={actorName} />
@@ -209,7 +206,7 @@ export default function SupervisorDashboard({ searchParams: searchParamsProp }) 
                         {request.status ? request.status.replace(/_/g, ' ') : 'N/A'}
                       </Badge>
                     </td>
-                     <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500">{new Date(request.updatedAt).toLocaleString()}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500">{new Date(request.updatedAt).toLocaleString()}</td>
                   </tr>
                 );
               })}

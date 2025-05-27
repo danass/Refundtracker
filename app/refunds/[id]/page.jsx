@@ -17,8 +17,7 @@ import {
   agentActionConfigurations,
   leadActionConfigurations,
   supervisorActionConfigurations,
-  financeActionConfigurations,
-  SUPERVISOR_APPROVAL_THRESHOLD // Import the constant
+  financeActionConfigurations
 } from '@/lib/actionConfigs.js';
 import { AlertTriangle, InfoIcon } from 'lucide-react';
 import Tooltip from '@/components/ui/Tooltip';
@@ -77,21 +76,19 @@ function JourneyItem({ entry, isLast }) {
 
   // Refactored structure for better timeline visuals
   return (
-    <li className="relative pl-5 pr-2 py-1 mb-4"> {/* Increased pl, mb slightly */} 
-      {/* Dot: Centered on the timeline axis, adjusted top for typical text alignment */} 
+    <li className="relative pl-5 pr-2 py-1 mb-4"> {/* Increased pl, mb slightly */}
+      {/* Dot: Centered on the timeline axis, adjusted top for typical text alignment */}
       <div 
         className={`absolute left-0 top-[0.5rem] w-3 h-3 ${getTimelineColor(entry.newStatus || entry.actionDescription || 'DEFAULT')} rounded-full border-2 border-white shadow-sm`}
       ></div>
-      
-      {/* Line: only if not last. Connects dots. */} 
+      {/* Line: only if not last. Connects dots. */}
       {!isLast && (
         <div 
           className={`absolute left-[5px] w-[2px] top-[calc(0.5rem_+_12px)] bottom-[-0.5rem] ${getTimelineColor(entry.newStatus || entry.actionDescription || 'DEFAULT')}`} 
           // Starts below the current dot, extends to just above where the next dot would align
         ></div>
       )}
-
-      {/* Content container, indented from line/dot */} 
+      {/* Content container, indented from line/dot */}
       <div className="ml-3">
         <time className="mb-1 text-xs font-normal leading-none text-slate-400">
           {/* Ensure entry.createdAt is valid before creating Date */}
@@ -195,23 +192,12 @@ export default async function RefundRequestDetail({ params, searchParams: search
     return config.applicableStatuses.includes(requestData.status);
   }).map(config => {
     // Handle dynamic buttonText for leadApprove action
-    if (config.key === 'leadApprove') { // Uncommented
+    if (config.key === 'leadApprove') { 
       return {
         ...config,
         // Ensure buttonText is always set, even if it was missing from the base config due to caching
-        buttonText: requestData.amount > SUPERVISOR_APPROVAL_THRESHOLD ? 'Approve & Escalate' : 'Approve (to Finance)',
+        buttonText: 'Approve (to Finance)', // Defaulting to this, remove SUPERVISOR_APPROVAL_THRESHOLD logic
       };
-    }
-    // Handle dynamic buttonText for financeHandlePaymentError
-    if (config.key === 'financeHandlePaymentError') {
-        let buttonText = 'Flag Payment Issue'; // Default for PAYMENT_PROCESSING
-        if (requestData.status === RefundStatus.ERROR_PROCESSING_PAYMENT) {
-            buttonText = 'Retry Payment (Reset to Approved)';
-        }
-         return {
-            ...config,
-            buttonText: buttonText,
-        };
     }
     return config;
   });
@@ -292,7 +278,10 @@ export default async function RefundRequestDetail({ params, searchParams: search
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
       <div className="mb-4">
-        <Link href={dashboardPath} className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+        <Link
+          href={dashboardPath}
+          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+          >
           &larr; Back to {simulatedRole.charAt(0).toUpperCase() + simulatedRole.slice(1)} Dashboard
         </Link>
       </div>
@@ -314,7 +303,6 @@ export default async function RefundRequestDetail({ params, searchParams: search
             </div>
         )}
       </header>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           {/* Client-specific forms */}
@@ -325,9 +313,9 @@ export default async function RefundRequestDetail({ params, searchParams: search
             <ClientSubmitInfoForm refundRequest={requestData} />
           )}
           {isClientView && (requestData.status === RefundStatus.DRAFT || requestData.status === RefundStatus.PENDING_AGENT_REVIEW ) && ( // Or other editable statuses for client
-             <InfoCard title="Edit Your Details (IBAN/BIC/Address)">
-                <ClientEditDetailsForm requestData={requestData} />
-             </InfoCard>
+             (<InfoCard title="Edit Your Details (IBAN/BIC/Address)">
+               <ClientEditDetailsForm requestData={requestData} />
+             </InfoCard>)
           )}
 
           {/* Refactored InfoCards */}
@@ -386,7 +374,12 @@ export default async function RefundRequestDetail({ params, searchParams: search
             <InfoItem label="Requested By Role" value={requestData.createdByRole} />
             {requestData.zendeskTicketId && (
               <InfoItem label="Zendesk Ticket ID">
-                <Link href={`https://somecompany.zendesk.com/agent/tickets/${requestData.zendeskTicketId}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                <Link
+                  href={`https://somecompany.zendesk.com/agent/tickets/${requestData.zendeskTicketId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline"
+                  >
                   {requestData.zendeskTicketId}
                 </Link>
               </InfoItem>
@@ -470,7 +463,7 @@ export default async function RefundRequestDetail({ params, searchParams: search
           )}
 
           {/* Internal Notes Update Form (Non-client roles) */}
-          {/* {!isClientView && (
+          {!isClientView && (
             <InfoCard title="Internal System Notes (Confidential)">
                 <InfoItem label="Current Internal Notes" value={requestData.internalNotes || '(No internal notes yet)'} />
                 <UpdateInternalNotesForm 
@@ -479,7 +472,7 @@ export default async function RefundRequestDetail({ params, searchParams: search
                     actorName={actorName} 
                 />
             </InfoCard>
-          )} */}
+          )}
         </div>
 
         <aside className="md:col-span-1 space-y-6">

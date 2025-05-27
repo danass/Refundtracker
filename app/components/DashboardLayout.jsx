@@ -97,14 +97,7 @@ export default function DashboardLayout({ children }) {
               
               return (
                 <li key={item.label}>
-                  <Link
-                    href={item.href}
-                    className={`flex items-center space-x-3 py-2 px-3 rounded-md transition-colors duration-150 text-sm font-medium ${
-                      isActive
-                        ? 'bg-slate-100 text-slate-900' 
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-                    }`}
-                  >
+                  <Link href={item.href} className={`flex items-center space-x-3 py-2 px-3 rounded-md transition-colors duration-150 text-sm font-medium ${isActive ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'}`}>
                     {item.icon && <span className={`${isActive ? 'text-slate-700' : 'text-slate-500'} group-hover:text-slate-600`}>{item.icon}</span>}
                     <span>{item.label}</span>
                   </Link>
@@ -114,7 +107,6 @@ export default function DashboardLayout({ children }) {
           </ul>
         </nav>
       </aside>
-
       <main className="flex-1 p-6 md:p-8 lg:p-10 overflow-y-auto">
         {children}
       </main>

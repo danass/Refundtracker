@@ -59,7 +59,7 @@ export default function NewRefundPage() {
     <div className="container mx-auto p-4 md:p-8 max-w-2xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-slate-800">New Refund Request</h1>
-        <Link href="/agent">
+        <Link href="/agent" >
           <Button variant="outline">&larr; Back to Dashboard</Button>
         </Link>
       </div>

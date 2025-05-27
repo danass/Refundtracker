@@ -39,21 +39,22 @@ export default function AgentTableBody({ refundRequests, simulatedRole = 'agent'
           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
             {request.isFlagged && <span title="Flagged Request" className="text-red-500 mr-1">⚠️</span>}
             {/* Existing Link for name, stop propagation to allow specific link click if preferred over row click */}
-            <Link 
-              href={`/refunds/${request.id}?simulatedRole=${simulatedRole}`} 
+            <Link
+              href={`/refunds/${request.id}?simulatedRole=${simulatedRole}`}
               className="hover:underline hover:text-slate-900"
-              onClick={(e) => e.stopPropagation()} // Important to prevent double navigation if row click also fires
-            >
+              // Important to prevent double navigation if row click also fires
+              onClick={(e) => e.stopPropagation()}
+              >
               {request.clientFirstName} {request.clientLastName}
             </Link>
           </td>
           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
             {/* Existing Link for ID, stop propagation */}
-            <Link 
-              href={`/refunds/${request.id}?simulatedRole=${simulatedRole}`} 
+            <Link
+              href={`/refunds/${request.id}?simulatedRole=${simulatedRole}`}
               className="hover:underline hover:text-slate-900"
               onClick={(e) => e.stopPropagation()}
-            >
+              >
               {request.ticketId || request.id}
             </Link>
           </td>

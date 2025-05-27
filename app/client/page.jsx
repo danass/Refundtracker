@@ -53,14 +53,12 @@ export default async function ClientDashboardPage({ searchParams: searchParamsIn
         <h1 className="text-2xl md:text-3xl font-bold text-slate-800">My Refund Requests</h1>
         {/* Future: Button to initiate a new request for client? */}
       </div>
-
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-6 rounded-md shadow-sm" role="alert">
           <p className="font-semibold">Error Loading Requests</p>
           <p className="text-sm">{error}</p>
         </div>
       )}
-
       {requests.length === 0 && !error && (
         <div className="text-center py-16 bg-white rounded-lg shadow-md border border-slate-200">
           <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
@@ -70,13 +68,15 @@ export default async function ClientDashboardPage({ searchParams: searchParamsIn
           <p className="mt-2 text-sm text-slate-500">You haven't submitted any refund requests yet.</p>
         </div>
       )}
-
       {requests.length > 0 && !error && (
         <div className="bg-white shadow-md rounded-lg border border-slate-200 overflow-hidden">
           <ul className="divide-y divide-slate-200">
             {requests.map((request) => (
               <li key={request.id} className="hover:bg-slate-50/50 transition-colors duration-150">
-                <Link href={`/refunds/${request.id}?simulatedRole=client`} className="block p-5 sm:p-6 focus:outline-none focus:bg-slate-100/70 group">
+                <Link
+                  href={`/refunds/${request.id}?simulatedRole=client`}
+                  className="block p-5 sm:p-6 focus:outline-none focus:bg-slate-100/70 group"
+                  >
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-semibold text-slate-600 group-hover:text-slate-800 transition-colors duration-150">
                       Request ID: <span className="text-slate-800 group-hover:text-slate-900">{request.ticketId || request.id}</span>
