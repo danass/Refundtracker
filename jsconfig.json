@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@/components/*": ["app/components/*"],
+      "@/context/*": ["app/context/*"],
+      "@/hooks/*": ["app/hooks/*"],
+      "@/lib/*": ["lib/*"],
+      "@/public/*": ["public/*"],
+      "@/styles/*": ["styles/*"],
+      "@/actions/*": ["app/actions/*"],
+      "@/ui/*": ["app/ui/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts", 
+    "**/*.ts", 
+    "**/*.tsx", 
+    "**/*.js", 
+    "**/*.jsx", 
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

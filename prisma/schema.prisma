@@ -1,0 +1,105 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum RefundStatus {
+  DRAFT
+  AWAITING_CLIENT_VALIDATION
+  CLIENT_VALIDATED
+  PENDING_AGENT_REVIEW
+  RETURNED_TO_AGENT_FOR_EDITS
+  RETURNED_TO_CLIENT_FOR_INFO
+  PENDING_LEAD_APPROVAL
+  PENDING_FINAL_APPROVAL
+  APPROVED_FOR_PAYMENT
+  PAYMENT_PROCESSING
+  PAID
+  REJECTED_BY_AGENT
+  REJECTED_BY_LEAD
+  REJECTED_BY_SUPERVISOR
+  CANCELLED_BY_AGENT
+  CANCELLED_BY_CLIENT
+  ERROR_PROCESSING_PAYMENT
+}
+
+model RefundRequest {
+  id                        String        @id @default(uuid())
+  ticketId                  String?
+  zendeskTicketId           String?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+  clientFirstName           String
+  clientLastName            String
+  clientEmail               String
+  clientAddress             String?
+  amount                    Float
+  originalOrderAmount       Float?
+  currency                  String
+  reason                    String?
+  iban                      String?
+  bic                       String?
+  bankName                  String?
+  bankAddress               String?
+  paymentMethod             String?
+  paymentProviderTransactionId String?
+  status                    RefundStatus  @default(DRAFT)
+  createdByRole             String // Consider linking to User role if User model is fully implemented
+  agentNotes                String?
+  leadComments              String?
+  supervisorNotes           String?
+  financeNotes              String?
+  internalNotes             String?
+  isFlagged                 Boolean       @default(false)
+  orderId                   String?       @unique // Assuming orderId should be unique to detect duplicates
+  riskTriggers              String? // Store as comma-separated string or JSON string
+  paidAt                    DateTime?    // Timestamp for when the refund was actually paid
+  
+  // Fields for original payment details
+  originalItemPaidFor       String?      // e.g., "1 Year Subscription for Service X"
+  originalCardUsed          String?      // e.g., "Visa **** 1234"
+  originalPaymentDate       DateTime?    // Date of the original transaction
+  originalClientFirstName   String?      // First name from original payment (for comparison)
+  originalClientLastName    String?      // Last name from original payment (for comparison)
+  originalClientAddress     String?      // Address from original payment (for comparison)
+
+  auditLogs                 AuditLog[]
+
+  @@unique([orderId, clientEmail], name: "OrderIdClientEmail") // Add a unique constraint on orderId and clientEmail for duplicate detection
+}
+
+enum UserRole {
+  client
+  agent
+  team_lead
+  supervisor
+  finance
+}
+
+model User {
+  id    String @id @default(uuid())
+  role  UserRole
+  name  String
+  email String @unique
+}
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  refundRequestId String
+  refundRequest   RefundRequest @relation(fields: [refundRequestId], references: [id])
+  actorRole       String // Consider linking to User role
+  actorName       String // Consider linking to User name
+  timestamp       DateTime @default(now())
+  previousStatus  RefundStatus?
+  newStatus       RefundStatus
+  actionDescription String
+  fieldChanges    String? // Store as JSON string
+} 
