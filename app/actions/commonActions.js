@@ -3,6 +3,39 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 
+
+export async function createAuditLog(logData) {
+  // Destructure with defaults for safety, though an error will be thrown by Prisma if required fields are missing
+  const {
+    refundRequestId,
+    actorRole, // This is now expected directly in logData
+    actorName,
+    actionDescription,
+    previousStatus,
+    newStatus,
+    fieldChanges,
+    isError = false // Add default for isError if you plan to use it
+  } = logData;
+
+  const prismaCreateData = {
+    refundRequestId,
+    actorRole, // Ensure your Prisma schema has this field
+    actorName,
+    actionDescription,
+    previousStatus,
+    newStatus,
+    fieldChanges,
+    isError, // Ensure your Prisma schema has this field if used
+  };
+
+  console.log('[commonActions] Data being passed to prisma.auditLog.create:', JSON.stringify(prismaCreateData, null, 2));
+
+  await prisma.auditLog.create({
+    data: prismaCreateData,
+  });
+}
+
+
 export async function updateRefundInternalNotes(prevState, formData) {
   const requestId = formData.get('requestId');
   const internalNotes = formData.get('internalNotes');

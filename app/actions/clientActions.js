@@ -76,77 +76,131 @@ export async function clientSubmitInfo(prevState, formData) {
   }
 }
 
-// Client Action: Validate/Confirm their initial refund request
+// Updated Client Action: Validate/Confirm and optionally update details
 export async function clientValidateRequest(prevState, formData) {
   const refundRequestId = formData.get('refundRequestId');
-  const actorName = formData.get('actorName') || 'Client';
+  const actorName = formData.get('actorName') || 'Client'; // actorName might be from ClientEditDetailsFields
   const actorRole = 'client';
+  const confirmValidation = formData.get('confirmValidation');
 
-  try {
-    const refund = await prisma.refundRequest.findUnique({ where: { id: refundRequestId } });
-    if (!refund) return { error: 'Refund not found.' };
-    if (refund.status !== RefundStatus.AWAITING_CLIENT_VALIDATION) {
-      return { error: 'Action not allowed. Request may have already been validated or is not awaiting validation.' };
-    }
-
-    const previousStatus = refund.status;
-    // Corrected: After client validation, immediately move to PENDING_AGENT_REVIEW
-    const newStatus = RefundStatus.PENDING_AGENT_REVIEW;
-
-    await prisma.refundRequest.update({
-      where: { id: refundRequestId },
-      data: {
-        status: newStatus, 
-      },
-    });
-
-    await createAuditLog(refundRequestId, actorRole, actorName, 'Refund Request Validated by Client', previousStatus, newStatus, 'Client confirmed request details. Moving to agent review.');
-    revalidateRelevantPaths(refundRequestId);
-    revalidatePath('/agent'); // Notify agent queue as it's now pending their review
-
-    return { success: true, message: 'Your refund request has been validated and submitted for agent review.' };
-  } catch (e) {
-    console.error('Client validate request error:', e);
-    return { error: 'Failed to validate your request.' };
+  if (!confirmValidation) {
+    return { error: 'You must check the confirmation box to submit.', success: false, fieldErrors: null };
   }
-}
 
-export async function clientUpdateDetailsAction(prevState, formData) {
-  const refundRequestId = formData.get('refundRequestId');
-  const actorName = formData.get('actorName') || 'Client'; // Default to client if not provided
-  const actorRole = 'client';
-
-  // Fields that client can attempt to update (even if some are read-only on form, good to have server-side logic)
   const submittedData = {
     clientFirstName: formData.get('clientFirstName'),
     clientLastName: formData.get('clientLastName'),
-    clientEmail: formData.get('clientEmail'), // Will be validated but not changed if original is different
     clientAddress: formData.get('clientAddress'),
-    iban: formData.get('iban')?.replace(/\s+/g, '').toUpperCase(), // Normalize IBAN: remove spaces, uppercase
-    bic: formData.get('bic')?.replace(/\s+/g, '').toUpperCase(),    // Normalize BIC: remove spaces, uppercase
-    reason: formData.get('reason'), // Will not be changed by client if original is different
+    iban: formData.get('iban')?.replace(/\s+/g, '').toUpperCase(),
+    bic: formData.get('bic')?.replace(/\s+/g, '').toUpperCase(),
+    // Email and reason are read-only on the form, not processed for update here
+  };
+
+  const fieldErrors = {};
+  if (submittedData.iban && !/^[A-Z]{2}[0-9A-Z]{13,32}$/.test(submittedData.iban)) {
+    fieldErrors.iban = 'Invalid IBAN format.';
+  }
+  if (submittedData.bic && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(submittedData.bic)) {
+    fieldErrors.bic = 'Invalid BIC/SWIFT format.';
+  }
+  // Add other field validations if necessary (e.g., for name, address format)
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return { error: 'Validation failed for updated details. Please check the fields.', fieldErrors, success: false };
+  }
+
+  try {
+    const refund = await prisma.refundRequest.findUnique({ where: { id: refundRequestId } });
+    if (!refund) return { error: 'Refund not found.', success: false };
+
+    if (refund.status !== RefundStatus.AWAITING_CLIENT_VALIDATION) {
+      return { error: 'Action not allowed. Request is not awaiting validation.', success: false };
+    }
+
+    const previousStatus = refund.status;
+    const dataToUpdate = {};
+    const changedFieldsArray = [];
+    let detailsChanged = false;
+
+    const allowedClientUpdates = ['clientFirstName', 'clientLastName', 'clientAddress', 'iban', 'bic'];
+
+    for (const key of allowedClientUpdates) {
+      const currentVal = refund[key] === null || refund[key] === undefined ? '' : refund[key];
+      const newVal = submittedData[key] === null || submittedData[key] === undefined ? '' : submittedData[key];
+
+      if (newVal !== currentVal) {
+        dataToUpdate[key] = newVal === '' ? null : newVal;
+        changedFieldsArray.push(`${key} from '${currentVal || 'empty'}' to '${newVal || 'empty'}'`);
+        detailsChanged = true;
+      }
+    }
+
+    let auditLogDescription = 'Client confirmed request details.';
+    let auditFieldChanges = 'Client confirmed request details. Moving to agent review.';
+
+    if (detailsChanged) {
+      await prisma.refundRequest.update({
+        where: { id: refundRequestId },
+        data: dataToUpdate,
+      });
+      auditLogDescription = 'Client updated details and validated request.';
+      auditFieldChanges = `Details updated: ${changedFieldsArray.join('; ')}. Request validated.`;
+      // Create an audit log specifically for the detail changes, status remains AWAITING_CLIENT_VALIDATION for this log entry.
+      await createAuditLog(refundRequestId, actorRole, actorName, 'Client Updated Details (During Validation Step)', previousStatus, previousStatus, changedFieldsArray.join('; '));
+    }
+
+    // Now, update the status to PENDING_AGENT_REVIEW
+    const newStatus = RefundStatus.PENDING_AGENT_REVIEW;
+    await prisma.refundRequest.update({
+      where: { id: refundRequestId },
+      data: { status: newStatus }, 
+    });
+
+    // Create audit log for the validation and status change
+    await createAuditLog(refundRequestId, actorRole, actorName, 'Refund Request Validated by Client', previousStatus, newStatus, 
+      detailsChanged ? `Validated after changes: ${changedFieldsArray.join('; ')}` : 'Client confirmed existing details.'
+    );
+
+    revalidateRelevantPaths(refundRequestId);
+    revalidatePath('/agent');
+
+    return { 
+        success: true, 
+        message: detailsChanged ? 'Your details have been updated and the request has been submitted for agent review.' : 'Your refund request has been validated and submitted for agent review.',
+        noChanges: !detailsChanged && confirmValidation // For toast logic on page
+    };
+
+  } catch (e) {
+    console.error('Client validate request error:', e);
+    return { error: 'Failed to validate your request.', success: false, fieldErrors: null };
+  }
+}
+
+// clientUpdateDetailsAction remains largely the same, but its usage context has changed.
+// It's now primarily for DRAFT or RETURNED_TO_CLIENT_FOR_INFO statuses when details are updated standalone.
+export async function clientUpdateDetailsAction(prevState, formData) {
+  const refundRequestId = formData.get('refundRequestId');
+  const actorName = formData.get('actorName') || 'Client'; 
+  const actorRole = 'client';
+
+  const submittedData = {
+    clientFirstName: formData.get('clientFirstName'),
+    clientLastName: formData.get('clientLastName'),
+    clientAddress: formData.get('clientAddress'),
+    iban: formData.get('iban')?.replace(/\s+/g, '').toUpperCase(), 
+    bic: formData.get('bic')?.replace(/\s+/g, '').toUpperCase(),
   };
 
   const errors = {};
-
-  // Validate submitted email (even if form field is read-only, to ensure data integrity if action is ever called differently)
-  if (submittedData.clientEmail && !/\S+@\S+\.\S+/.test(submittedData.clientEmail)) {
-    errors.clientEmail = 'Invalid email format provided.';
-  }
-
-  // Basic IBAN structure validation (very simplified - real validation is complex)
-  // Example: Two letters followed by up to 30 alphanumeric characters.
   if (submittedData.iban && !/^[A-Z]{2}[0-9A-Z]{13,32}$/.test(submittedData.iban)) {
-    errors.iban = 'Invalid IBAN format. It should start with 2 letters and be followed by numbers/letters.';
+    errors.iban = 'Invalid IBAN format.';
   }
-  
-  // Basic BIC/SWIFT structure validation
   if (submittedData.bic && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(submittedData.bic)) {
       errors.bic = 'Invalid BIC/SWIFT format.';
   }
 
   if (Object.keys(errors).length > 0) {
-    return { error: 'Validation failed. Please check the fields.', errors, success: false, ...prevState };
+    return { error: 'Validation failed. Please check the fields.', errors, success: false };
   }
 
   try {
@@ -155,53 +209,50 @@ export async function clientUpdateDetailsAction(prevState, formData) {
 
     const allowedEditStatuses = [
       RefundStatus.RETURNED_TO_CLIENT_FOR_INFO,
-      RefundStatus.AWAITING_CLIENT_VALIDATION,
-      RefundStatus.PENDING_AGENT_REVIEW,
       RefundStatus.DRAFT
+      // AWAITING_CLIENT_VALIDATION is handled by clientValidateRequest now for detail + validation submission
     ];
 
     if (!allowedEditStatuses.includes(refund.status)) {
-      return { error: 'Your request is not in a status that allows direct editing of these details.', success: false };
+      // This case should ideally not be hit if UI logic is correct for AWAITING_CLIENT_VALIDATION
+      return { error: 'Your request is not in a status that allows standalone detail editing via this action.', success: false };
     }
 
     const previousStatus = refund.status;
-    let newStatus = refund.status; // Initialize newStatus with current status
-
     const updatedFields = {};
     const changedFieldsArray = [];
-
-    // Only allow client to update specific fields
     const allowedClientUpdates = ['clientFirstName', 'clientLastName', 'clientAddress', 'iban', 'bic'];
 
     for (const key of allowedClientUpdates) {
-      // Ensure submittedData[key] is not just empty string if refund[key] is null/undefined
       const currentVal = refund[key] === null || refund[key] === undefined ? '' : refund[key];
       const newVal = submittedData[key] === null || submittedData[key] === undefined ? '' : submittedData[key];
-
       if (newVal !== currentVal) {
-        updatedFields[key] = submittedData[key] === '' ? null : submittedData[key]; // Store null if emptied
-        changedFieldsArray.push(`${key} from '${currentVal}' to '${newVal}'`);
+        updatedFields[key] = newVal === '' ? null : newVal;
+        changedFieldsArray.push(`${key} from '${currentVal || 'empty'}' to '${newVal || 'empty'}'`);
       }
-    }
-    
-    // Client cannot change their email or reason for refund through this form
-    // These fields are made read-only on the form, this is a server-side enforcement too.
-    if (submittedData.clientEmail && submittedData.clientEmail !== refund.clientEmail) {
-        // Log or notify if an attempt to change read-only field is made, but don't update it.
-        console.warn(`Attempt to change read-only field clientEmail by ${actorName} for request ${refundRequestId}.`);
-    }
-    if (submittedData.reason && submittedData.reason !== refund.reason) {
-        console.warn(`Attempt to change read-only field reason by ${actorName} for request ${refundRequestId}.`);
     }
 
     if (Object.keys(updatedFields).length === 0) {
       return { success: true, message: 'No changes were detected in the editable fields.', noChanges: true };
     }
 
-    // If there are actual field changes, the status moves to RETURNED_TO_AGENT_FOR_EDITS
-    newStatus = RefundStatus.RETURNED_TO_AGENT_FOR_EDITS;
-    updatedFields.status = newStatus;
+    // For DRAFT or RETURNED_TO_CLIENT_FOR_INFO, if details are updated, status might change.
+    // If RETURNED_TO_CLIENT_FOR_INFO, it goes to RETURNED_TO_AGENT_FOR_EDITS.
+    // If DRAFT, it might stay DRAFT or move to AWAITING_CLIENT_VALIDATION depending on business rules (not handled here yet)
+    let newStatus = refund.status;
+    let auditDescription = 'Client Updated Request Details';
+    let successMessage = 'Your details have been updated.';
 
+    if (refund.status === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO) {
+      newStatus = RefundStatus.RETURNED_TO_AGENT_FOR_EDITS;
+      updatedFields.status = newStatus;
+      auditDescription = 'Client Updated Request Details (Returned to Agent)';
+      successMessage = 'Your details have been updated and sent for agent review.';
+    } else if (refund.status === RefundStatus.DRAFT) {
+        auditDescription = 'Client Updated Draft Details';
+        successMessage = 'Your draft details have been updated.';
+        // Stays in DRAFT status, no change to newStatus or updatedFields.status
+    }
 
     await prisma.refundRequest.update({
       where: { id: refundRequestId },
@@ -212,17 +263,18 @@ export async function clientUpdateDetailsAction(prevState, formData) {
       refundRequestId,
       actorRole,
       actorName,
-      'Client Updated Request Details (Returned to Agent)',
-      previousStatus,
-      newStatus, // Use the determined newStatus
-      changedFieldsArray.length > 0 ? changedFieldsArray.join('; ') : 'Client updated information, awaiting agent review.'
+      auditDescription,
+      previousStatus, 
+      newStatus, // This is the newStatus determined above
+      changedFieldsArray.join('; ')
     );
 
     revalidateRelevantPaths(refundRequestId);
-    // Always revalidate agent path as it's now RETURNED_TO_AGENT_FOR_EDITS
-    revalidatePath('/agent'); 
-
-    return { success: true, message: 'Your details have been updated and sent for agent review.', errors: {} };
+    if (updatedFields.status && updatedFields.status !== previousStatus) {
+      revalidatePath('/agent'); 
+    }
+    
+    return { success: true, message: successMessage, errors: {}, noChanges: false };
 
   } catch (e) {
     console.error('Client update details error:', e);

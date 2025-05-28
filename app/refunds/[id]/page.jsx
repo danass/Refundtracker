@@ -1,26 +1,43 @@
+// 'use client'; // This page should be a Server Component
 import { prisma } from '@/lib/prisma.js';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+// Button might still be used by BackButton or other general UI here
+// import { Button } from '@/components/ui/button'; 
 import { getRefundRequestWithHistory } from '@/lib/query';
 import { notFound } from 'next/navigation';
 import ClientSubmitInfoForm from '@/components/refund-actions/ClientSubmitInfoForm';
-import ClientValidateRequestForm from '@/components/refund-actions/ClientValidateRequestForm';
-import ClientEditDetailsForm from '@/components/refund-actions/ClientEditDetailsForm';
+// ClientEditDetailsForm is now used within ClientValidationAndEditForm or standalone for other statuses
+import ClientEditDetailsForm from '@/components/refund-actions/ClientEditDetailsForm'; 
 import ActionsPanel from '@/components/refund-actions/ActionsPanel';
 import NoteDisplayItem from '@/components/NoteDisplayItem';
 import UpdateInternalNotesForm from '@/components/refund-actions/UpdateInternalNotesForm';
-import { RefundStatus } from '@prisma/client';
+import { RefundStatus } from '@prisma/client'; // This is fine in Server Components
 import {
   agentActionConfigurations,
   leadActionConfigurations,
   supervisorActionConfigurations,
-  financeActionConfigurations
+  financeActionConfigurations,
+  adminActionConfigurations
 } from '@/lib/actionConfigs.js';
-import { AlertTriangle, InfoIcon } from 'lucide-react';
+import { AlertTriangle, InfoIcon } from 'lucide-react'; // ArrowLeft might be in BackButton
 import Tooltip from '@/components/ui/Tooltip';
+import { getStatusVariant } from '@/lib/utils';
+import BackButton from '@/components/ui/BackButton';
+
+// Import the new Client Component for the combined form
+import ClientValidationAndEditForm from '@/components/refund-actions/ClientValidationAndEditForm';
+// InfoCard is assumed to be a general UI component, ensure it's correctly located or defined.
+// If InfoCard is defined in this file, it needs to be extracted if it uses client hooks or passed as children to client components.
+// For now, assuming it's a simple presentational component or correctly structured.
+
+// Removed client-specific hooks from page component:
+// import { useActionState, useEffect, useState, useTransition } from 'react';
+// import { clientValidateRequest } from '@/actions/clientActions'; 
+// import { toast } from 'sonner';
+// import { useFormStatus } from 'react-dom';
+
+import { InfoCard } from '@/components/ui/InfoCard'; // Updated import path
 
 function getDashboardPath(role) {
   switch (role) {
@@ -29,22 +46,12 @@ function getDashboardPath(role) {
     case 'team_lead': return '/lead';
     case 'supervisor': return '/supervisor';
     case 'finance': return '/finance';
-    case 'client': return '/client'; // Or perhaps just '/'
+    case 'client': return '/client'; 
     default: return '/';
   }
 }
 
-function InfoCard({ title, children, titleBadge }) {
-  return (
-    <div className="bg-white shadow border border-slate-200 rounded-lg p-6 mb-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-slate-700">{title}</h3>
-        {titleBadge}
-      </div>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
+// InfoCard definition removed from here
 
 function InfoItem({ label, value, isBadge, badgeVariant = 'default', children }) {
   return (
@@ -73,25 +80,18 @@ function JourneyItem({ entry, isLast }) {
       if (status.includes('RETURNED') || status.includes('ESCALATE')) return 'bg-orange-500';
       return 'bg-gray-400'; 
     };
-
-  // Refactored structure for better timeline visuals
   return (
-    <li className="relative pl-5 pr-2 py-1 mb-4"> {/* Increased pl, mb slightly */}
-      {/* Dot: Centered on the timeline axis, adjusted top for typical text alignment */}
+    <li className="relative pl-5 pr-2 py-1 mb-4"> 
       <div 
         className={`absolute left-0 top-[0.5rem] w-3 h-3 ${getTimelineColor(entry.newStatus || entry.actionDescription || 'DEFAULT')} rounded-full border-2 border-white shadow-sm`}
       ></div>
-      {/* Line: only if not last. Connects dots. */}
       {!isLast && (
         <div 
           className={`absolute left-[5px] w-[2px] top-[calc(0.5rem_+_12px)] bottom-[-0.5rem] ${getTimelineColor(entry.newStatus || entry.actionDescription || 'DEFAULT')}`} 
-          // Starts below the current dot, extends to just above where the next dot would align
         ></div>
       )}
-      {/* Content container, indented from line/dot */}
       <div className="ml-3">
         <time className="mb-1 text-xs font-normal leading-none text-slate-400">
-          {/* Ensure entry.createdAt is valid before creating Date */}
           {(entry.createdAt && !isNaN(new Date(entry.createdAt).valueOf())) ? new Date(entry.createdAt).toLocaleString() : 'Date N/A'} by {entry.changedBy || 'System'}
         </time>
         <h3 className="text-sm font-semibold text-slate-800 mt-0.5">
@@ -108,12 +108,14 @@ function JourneyItem({ entry, isLast }) {
   );
 }
 
+// Removed ClientValidationAndEditForm from here, it's now imported
+
 export default async function RefundRequestDetail({ params, searchParams: searchParamsProp }) {
+  // ... (initial data fetching and variable setup remains the same)
   const searchParams = await searchParamsProp;
   const simulatedRole = searchParams?.simulatedRole || 'client';
   const actorName = `Simulated ${simulatedRole.charAt(0).toUpperCase() + simulatedRole.slice(1)}`;
   const { id } = await params;
-  const dashboardPath = getDashboardPath(simulatedRole);
 
   const refundRequest = await getRefundRequestWithHistory(id);
 
@@ -122,13 +124,11 @@ export default async function RefundRequestDetail({ params, searchParams: search
   }
 
   const requestData = { ...refundRequest };
-
   requestData.currencySymbol = requestData.currency === 'USD' ? '$' : requestData.currency === 'EUR' ? '€' : requestData.currency === 'GBP' ? '£' : '';
 
   const isClientAddressMismatch = requestData.clientAddress !== requestData.originalClientAddress;
   const isClientFirstNameMismatch = requestData.clientFirstName !== requestData.originalClientFirstName;
   const isClientLastNameMismatch = requestData.clientLastName !== requestData.originalClientLastName;
-  const isNameMismatch = isClientFirstNameMismatch || isClientLastNameMismatch;
 
   const hasAgentNotes = requestData.agentNotes && requestData.agentNotes.trim() !== '';
   const hasClientValidationDetails = requestData.clientValidationDetails && requestData.clientValidationDetails.trim() !== '';
@@ -136,78 +136,44 @@ export default async function RefundRequestDetail({ params, searchParams: search
   const hasSupervisorNotes = requestData.supervisorNotes && requestData.supervisorNotes.trim() !== '';
   const hasFinanceNotes = requestData.financeNotes && requestData.financeNotes.trim() !== '';
   const hasRejectionReason = requestData.rejectionReason && requestData.rejectionReason.trim() !== '';
-
   const hasAnyNotes = hasAgentNotes || hasClientValidationDetails || hasLeadComments || hasSupervisorNotes || hasFinanceNotes || hasRejectionReason;
-
-  const getStatusVariant = (status) => {
-    if (!status) return 'default';
-    const s = status; // Alias for brevity
-    if (s === RefundStatus.PENDING_AGENT_REVIEW) return 'agent-pending';
-    if (s === RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) return 'warning';
-    if (s === RefundStatus.PENDING_LEAD_APPROVAL) return 'lead-pending';
-    if (s === RefundStatus.PENDING_FINAL_APPROVAL) return 'supervisor-pending';
-    if (s === RefundStatus.APPROVED_FOR_PAYMENT) return 'approved';
-    if (s === RefundStatus.PAYMENT_PROCESSING) return 'processing';
-    if (s === RefundStatus.PAID) return 'success';
-    if (s === RefundStatus.AWAITING_CLIENT_VALIDATION || s === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO) return 'client-action';
-    if (s.includes('REJECT') || s.includes('CANCEL')) return 'destructive';
-    return 'default';
-  };
 
   const isClientView = simulatedRole === 'client';
   const isAgentView = simulatedRole === 'agent';
   const isLeadView = simulatedRole === 'team_lead' || simulatedRole === 'lead';
   const isSupervisorView = simulatedRole === 'supervisor';
   const isFinanceView = simulatedRole === 'finance';
+  const isAdminView = simulatedRole === 'admin';
 
   let availableActions = [];
-  const allActionConfigs = [
-    ...agentActionConfigurations,
-    ...leadActionConfigurations,
-    ...supervisorActionConfigurations,
-    ...financeActionConfigurations,
-  ];
-
-  console.log('--- Debugging Actions ---');
-  console.log('Simulated Role:', simulatedRole);
-  console.log('Is Agent View:', isAgentView);
-  console.log('Request Status:', requestData.status);
-  console.log('Expected Status (RETURNED_TO_AGENT_FOR_EDITS):', RefundStatus.RETURNED_TO_AGENT_FOR_EDITS);
-
-  availableActions = allActionConfigs.filter(config => {
-    let roleMatch = false;
-    if (config.requiredRole === 'agent' && isAgentView) {
-      roleMatch = true;
-      console.log(`Agent action config: ${config.key}`);
-      console.log(`Applicable statuses: ${config.applicableStatuses}`);
-      const statusMatch = config.applicableStatuses.includes(requestData.status);
-      console.log(`Status match for ${config.key} (${requestData.status}): ${statusMatch}`);
-    }
-    else if ((config.requiredRole === 'lead' || config.requiredRole === 'team_lead') && isLeadView) roleMatch = true;
-    else if (config.requiredRole === 'supervisor' && isSupervisorView) roleMatch = true;
-    else if (config.requiredRole === 'finance' && isFinanceView) roleMatch = true;
-
-    if (!roleMatch) return false;
-
-    return config.applicableStatuses.includes(requestData.status);
-  }).map(config => {
-    // Handle dynamic buttonText for leadApprove action
-    if (config.key === 'leadApprove') { 
-      return {
-        ...config,
-        // Ensure buttonText is always set, even if it was missing from the base config due to caching
-        buttonText: 'Approve (to Finance)', // Defaulting to this, remove SUPERVISOR_APPROVAL_THRESHOLD logic
-      };
-    }
-    return config;
-  });
-
-  console.log('--- Final availableActions Check Before Render ---');
-  // Using JSON.stringify to ensure the array content is fully logged if it's complex
-  console.log('Final availableActions Content:', JSON.stringify(availableActions, null, 2));
-  console.log('Final availableActions.length:', availableActions.length);
-
-  // Show actions for all non-terminal statuses
+  if (!isClientView) {
+    const allActionConfigs = [
+      ...agentActionConfigurations,
+      ...leadActionConfigurations,
+      ...supervisorActionConfigurations,
+      ...financeActionConfigurations,
+      ...(isAdminView ? adminActionConfigurations : [])
+    ];
+    availableActions = allActionConfigs.filter(config => {
+      let roleMatch = false;
+      if (config.requiredRole === 'agent' && isAgentView) roleMatch = true;
+      else if ((config.requiredRole === 'lead' || config.requiredRole === 'team_lead') && isLeadView) roleMatch = true;
+      else if (config.requiredRole === 'supervisor' && isSupervisorView) roleMatch = true;
+      else if (config.requiredRole === 'finance' && isFinanceView) roleMatch = true;
+      else if (config.requiredRole === 'admin' && isAdminView) roleMatch = true;
+      if (!roleMatch) return false;
+      return config.applicableStatuses.includes(requestData.status);
+    }).map(config => {
+      if (config.key === 'leadApprove') { 
+        return {
+          ...config,
+          buttonText: 'Approve (to Finance)',
+        };
+      }
+      return config;
+    });
+  }
+  
   const terminalStatuses = [
     RefundStatus.PAID,
     RefundStatus.REJECTED_BY_AGENT,
@@ -216,7 +182,7 @@ export default async function RefundRequestDetail({ params, searchParams: search
     RefundStatus.CANCELLED_BY_CLIENT,
     RefundStatus.CANCELLED_BY_AGENT
   ];
-  const showActionsPanel = (isAgentView || isLeadView || isSupervisorView || isFinanceView) &&
+  const showActionsPanel = (isAgentView || isLeadView || isSupervisorView || isFinanceView || isAdminView) &&
     requestData.status &&
     !terminalStatuses.includes(requestData.status);
 
@@ -229,32 +195,9 @@ export default async function RefundRequestDetail({ params, searchParams: search
     actionDescription: log.actionDescription
   })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-  // Data for new structure
-  const isAmountAbovePayment = requestData.amount > (requestData.originalOrderAmount || 0);
-  const isAmountBelowPayment = requestData.amount < (requestData.originalOrderAmount || 0);
-
-  // Placeholder for payment details - assuming these fields exist or will be added to schema
-  // For example: originalItemPaidFor, originalCardUsed (last 4 digits), originalPaymentDate
-  const originalPaymentDetails = {
-    "Item Paid For": requestData.originalItemPaidFor || "N/A",
-    "Payment Amount": requestData.originalOrderAmount ? `${requestData.currency} ${requestData.originalOrderAmount.toFixed(2)}` : "N/A",
-    "Card Used": requestData.originalCardUsed || "N/A", // e.g., Visa **** 1234
-    "Transaction ID": requestData.paymentProviderTransactionId || "N/A",
-    "Payment Provider": requestData.paymentMethod || "N/A", // This might be 'paypal', 'stripe' etc. if available
-    "Date of Payment": requestData.originalPaymentDate ? new Date(requestData.originalPaymentDate).toLocaleString() : "N/A",
-  };
-
-  // Placeholder for personal details from original payment vs refund request
-  // For example: originalClientFirstName, originalClientLastName, originalClientAddress
-  const arePersonalDetailsDifferent = 
-    requestData.clientFirstName !== requestData.originalClientFirstName ||
-    requestData.clientLastName !== requestData.originalClientLastName ||
-    requestData.clientAddress !== requestData.originalClientAddress;
-
-  // Add zendeskTicketId here if it exists
   const displayData = {
     "Request ID (Internal)": requestData.ticketId || requestData.id,
-    "Zendesk Ticket ID": requestData.zendeskTicketId, // Display Zendesk Ticket ID
+    "Zendesk Ticket ID": requestData.zendeskTicketId, 
     "Client Name": `${requestData.clientFirstName} ${requestData.clientLastName}`,
     "Client Email": requestData.clientEmail,
     "Client Address": requestData.clientAddress,
@@ -265,8 +208,8 @@ export default async function RefundRequestDetail({ params, searchParams: search
     "Payment Provider Tx ID": requestData.paymentProviderTransactionId,
     "IBAN": requestData.iban,
     "BIC/SWIFT": requestData.bic,
-    "Bank Name": requestData.bankName, // Will be removed from client edit form
-    "Bank Address": requestData.bankAddress, // Will be removed from client edit form
+    "Bank Name": requestData.bankName, 
+    "Bank Address": requestData.bankAddress, 
     "Created At": new Date(requestData.createdAt).toLocaleString(),
     "Last Updated": new Date(requestData.updatedAt).toLocaleString(),
     "Created By Role": requestData.createdByRole,
@@ -278,12 +221,9 @@ export default async function RefundRequestDetail({ params, searchParams: search
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
       <div className="mb-4">
-        <Link
-          href={dashboardPath}
-          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-          >
-          &larr; Back to {simulatedRole.charAt(0).toUpperCase() + simulatedRole.slice(1)} Dashboard
-        </Link>
+        <BackButton 
+          buttonText={`Back to ${simulatedRole.charAt(0).toUpperCase() + simulatedRole.slice(1)} Dashboard`}
+        />
       </div>
       <header className="mb-8">
         <div className="flex justify-between items-center mb-2">
@@ -295,7 +235,6 @@ export default async function RefundRequestDetail({ params, searchParams: search
           </Badge>
         </div>
         <p className="text-sm text-slate-500">Simulated Role: <span className="font-medium text-slate-700">{actorName}</span></p>
-         {/* Hide Flagged Request banner from client view */}
          {!isClientView && requestData.isFlagged && (
             <div className="mt-3 p-3 bg-yellow-50 border border-yellow-300 rounded-md flex items-center text-yellow-700 text-sm">
                 <AlertTriangle size={18} className="mr-2 text-yellow-600" />
@@ -305,20 +244,25 @@ export default async function RefundRequestDetail({ params, searchParams: search
       </header>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
-          {/* Client-specific forms */}
+          {/* Client-specific forms Logic Updated */}
           {isClientView && requestData.status === RefundStatus.AWAITING_CLIENT_VALIDATION && (
-            <ClientValidateRequestForm refundRequest={requestData} />
+            // Use the new imported Client Component
+            <ClientValidationAndEditForm refundRequest={requestData} actorName={actorName} />
           )}
           {isClientView && requestData.status === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO && (
-            <ClientSubmitInfoForm refundRequest={requestData} />
+            <>
+              <InfoCard title="Update Your Details (IBAN/BIC/Address)"> 
+                <ClientEditDetailsForm requestData={requestData} actorName={actorName} asStandaloneForm={true} />
+              </InfoCard>
+              <ClientSubmitInfoForm refundRequest={requestData} actorName={actorName} />
+            </>
           )}
-          {isClientView && (requestData.status === RefundStatus.DRAFT || requestData.status === RefundStatus.PENDING_AGENT_REVIEW ) && ( // Or other editable statuses for client
-             (<InfoCard title="Edit Your Details (IBAN/BIC/Address)">
-               <ClientEditDetailsForm requestData={requestData} />
-             </InfoCard>)
+          {isClientView && (requestData.status === RefundStatus.DRAFT) && ( 
+             <InfoCard title="Edit Your Draft Details (IBAN/BIC/Address)">
+               <ClientEditDetailsForm requestData={requestData} actorName={actorName} asStandaloneForm={true} />
+             </InfoCard>
           )}
 
-          {/* Refactored InfoCards */}
           <InfoCard title="Refund Request Details">
             <InfoItem label="Request ID" value={requestData.ticketId || requestData.id} />
             <InfoItem label="Client First Name" value={requestData.clientFirstName}>
@@ -349,7 +293,6 @@ export default async function RefundRequestDetail({ params, searchParams: search
               label="Amount" 
               value={<span className="font-bold text-md">{`${requestData.currencySymbol}${requestData.amount?.toFixed(2)} ${requestData.currency}`}</span>}
             >
-              {/* Child for icons, passed to InfoItem */}
               {requestData.originalOrderAmount != null && requestData.amount > requestData.originalOrderAmount && (
                 <Tooltip text={`Amount requested (${requestData.currencySymbol}${requestData.amount}) is MORE than original payment (${requestData.currencySymbol}${requestData.originalOrderAmount}).`}>
                   <AlertTriangle size={16} className="ml-2 text-yellow-500" />
@@ -370,7 +313,7 @@ export default async function RefundRequestDetail({ params, searchParams: search
             <InfoItem label="Status" value={requestData.status} isBadge={true} badgeVariant={getStatusVariant(requestData.status)} />
             <InfoItem label="Created At" value={new Date(requestData.createdAt).toLocaleString()} />
             <InfoItem label="Last Updated" value={new Date(requestData.updatedAt).toLocaleString()} />
-            {requestData.paidAt && <InfoItem label="Paid At" value={new Date(requestData.paidAt).toLocaleString()} />}
+            {requestData.paidAt && <InfoItem label="Paid At" value={new Date(requestData.paidAt).toLocaleString()} />} 
             <InfoItem label="Requested By Role" value={requestData.createdByRole} />
             {requestData.zendeskTicketId && (
               <InfoItem label="Zendesk Ticket ID">
@@ -386,14 +329,11 @@ export default async function RefundRequestDetail({ params, searchParams: search
             )}
           </InfoCard>
 
-          {/* Conditionally render Original Payment Details only if not in client view */}
           {!isClientView && (
             <InfoCard title="Original Payment Details">
               <InfoItem label="Order ID" value={requestData.orderId} />
               <InfoItem label="Original Item/Service" value={requestData.originalItemPaidFor} />
               <InfoItem label="Payment Method">
-                {/* Placeholder for icon - will add specific icons based on requestData.paymentMethod later */}
-                {/* {getPaymentMethodIcon(requestData.paymentMethod)} */}
                 <span className="ml-2">{requestData.paymentMethod ? requestData.paymentMethod.replace(/_/g, ' ') : 'N/A'}</span>
               </InfoItem>
               <InfoItem label="Card Used (Partial)" value={requestData.originalCardUsed} />
@@ -427,7 +367,6 @@ export default async function RefundRequestDetail({ params, searchParams: search
             </InfoCard>
           )}
 
-          {/* Bank Details for Refund (if applicable) */}
           {(requestData.iban || requestData.bic || requestData.bankName) && (
             <InfoCard title="Bank Details for Refund">
               {requestData.iban && <InfoItem label="IBAN" value={requestData.iban} />}
@@ -437,7 +376,6 @@ export default async function RefundRequestDetail({ params, searchParams: search
             </InfoCard>
           )}
           
-          {/* Notes section */}
           {hasAnyNotes && (
             <InfoCard title="Notes & Communications Log">
               {hasAgentNotes && (
@@ -458,11 +396,9 @@ export default async function RefundRequestDetail({ params, searchParams: search
               {hasRejectionReason && (
                 <NoteDisplayItem title="Rejection Reason" notes={requestData.rejectionReason} />
               )}
-              {/* Fallback message is removed as the card itself is now conditional */}
             </InfoCard>
           )}
 
-          {/* Internal Notes Update Form (Non-client roles) */}
           {!isClientView && (
             <InfoCard title="Internal System Notes (Confidential)">
                 <InfoItem label="Current Internal Notes" value={requestData.internalNotes || '(No internal notes yet)'} />
@@ -476,7 +412,6 @@ export default async function RefundRequestDetail({ params, searchParams: search
         </div>
 
         <aside className="md:col-span-1 space-y-6">
-          {/* Action Panel Logic */} 
           {!isClientView ? (
             availableActions.length > 0 ? (
               <ActionsPanel
@@ -489,6 +424,7 @@ export default async function RefundRequestDetail({ params, searchParams: search
                   supervisorNotes: requestData.supervisorNotes,
                   financeNotes: requestData.financeNotes,
                   rejectionReason: requestData.rejectionReason,
+                  adminNotes: requestData.internalNotes
                 }}
               />
             ) : (
@@ -498,7 +434,6 @@ export default async function RefundRequestDetail({ params, searchParams: search
             )
           ) : null}
           
-          {/* Journey / Audit Log - Hide from client view */}
           {!isClientView && (
             <InfoCard title="Request Journey" titleBadge={auditLogToDisplay.length > 0 ? <Badge variant="outline">{auditLogToDisplay.length} entries</Badge> : null}>
               {auditLogToDisplay.length > 0 ? (

@@ -4,28 +4,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { RefundStatus } from '@prisma/client'; // Ensure this is available or pass variants
+import { getStatusVariant } from '@/lib/utils'; // Import the utility function
 
 export default function AgentTableBody({ refundRequests, simulatedRole = 'agent' }) {
   const router = useRouter();
 
   const handleRowClick = (requestId) => {
     router.push(`/refunds/${requestId}?simulatedRole=${simulatedRole}`);
-  };
-
-  const getStatusVariant = (status) => {
-    if (!status) return 'default';
-    const s = status;
-    if (s === RefundStatus.PENDING_AGENT_REVIEW) return 'agent-pending';
-    if (s === RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) return 'warning';
-    if (s === RefundStatus.PENDING_LEAD_APPROVAL) return 'lead-pending';
-    // Add other statuses as needed from the original page
-    if (s === RefundStatus.PENDING_FINAL_APPROVAL) return 'supervisor-pending';
-    if (s === RefundStatus.APPROVED_FOR_PAYMENT) return 'approved';
-    if (s === RefundStatus.PAYMENT_PROCESSING) return 'processing';
-    if (s === RefundStatus.PAID) return 'success';
-    if (s === RefundStatus.AWAITING_CLIENT_VALIDATION || s === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO) return 'client-action';
-    if (s.includes('REJECT') || s.includes('CANCEL')) return 'destructive';
-    return 'default';
   };
 
   return (

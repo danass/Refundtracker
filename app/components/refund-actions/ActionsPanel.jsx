@@ -35,23 +35,33 @@ export default function ActionsPanel({
         />
       </div>
       <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-200 mt-4">
-        {availableActions.map((actionProps) => (
-          <ActionButton
-            key={actionProps.key || actionProps.buttonText} // Ensure a unique key
-            refundRequestId={refundRequest.id}
-            actorName={actorName}
-            comment={comment} // Pass the shared comment
-            commentFieldName={actionProps.commentFieldName || sharedTextareaName} // Pass the specific field name if any
-            serverAction={actionProps.serverAction}
-            buttonText={actionProps.buttonText}
-            processingText={actionProps.processingText}
-            successText={actionProps.successText}
-            variant={actionProps.variant}
-            buttonClassName={actionProps.buttonClassName}
-            requiresComment={actionProps.requiresComment}
-            additionalFormData={actionProps.additionalFormData}
-          />
-        ))}
+        {availableActions.map((actionProps) => {
+          // Prepare additionalFormData, ensuring targetStatus is included if present
+          const additionalDataForAction = {
+            ...(actionProps.additionalFormData || {}), // Include any existing additionalFormData
+          };
+          if (actionProps.targetStatus) {
+            additionalDataForAction.targetStatus = actionProps.targetStatus;
+          }
+
+          return (
+            <ActionButton
+              key={actionProps.key || actionProps.buttonText} // Ensure a unique key
+              refundRequestId={refundRequest.id}
+              actorName={actorName}
+              comment={comment} // Pass the shared comment
+              commentFieldName={actionProps.commentFieldName || sharedTextareaName} // Pass the specific field name if any
+              serverAction={actionProps.serverAction}
+              buttonText={actionProps.buttonText}
+              processingText={actionProps.processingText}
+              successText={actionProps.successText}
+              variant={actionProps.variant}
+              buttonClassName={actionProps.buttonClassName}
+              requiresComment={actionProps.requiresComment}
+              additionalFormData={additionalDataForAction} // Pass the constructed additional data
+            />
+          );
+        })}
       </div>
     </div>
   );

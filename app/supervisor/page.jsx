@@ -13,6 +13,7 @@ import { supervisorBulkApprove } from '@/actions/supervisorActions';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { ArrowLeft } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -123,6 +124,14 @@ export default function SupervisorDashboard({ searchParams: searchParamsProp }) 
   return (
     <div className="p-4 md:p-6 lg:p-8">
       <h1 className="text-2xl md:text-3xl font-bold text-slate-800 mb-6">Supervisor Dashboard</h1>
+      
+      <div className="mb-6">
+        <Button variant="outline" onClick={() => router.push('/overview')} className="text-slate-700 border-slate-300 hover:bg-slate-50">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Overview
+        </Button>
+      </div>
+
       <h2 className="text-xl font-semibold text-slate-700 mb-4">
         Requests for Final Approval
       </h2>

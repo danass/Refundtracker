@@ -6,6 +6,7 @@ import PaginationControls from '@/components/PaginationControls';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, use } from 'react'; // Added use
 import { Badge } from '@/components/ui/badge';
+import LeadTableBody from '@/components/dashboard/LeadTableBody'; // Import LeadTableBody
 
 const ITEMS_PER_PAGE = 10;
 
@@ -77,41 +78,7 @@ export default function LeadDashboard({ searchParams: searchParamsProp }) { // R
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Updated At</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-slate-200">
-              {refundRequests.map((request) => (
-                <tr 
-                  key={request.id} 
-                  className="hover:bg-slate-50 transition-colors duration-150 cursor-pointer"
-                  onClick={() => handleRowClick(request.id)}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 hover:underline">
-                    {request.ticketId || request.id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{request.clientFirstName} {request.clientLastName}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                    {request.currency === 'USD' ? '$' : request.currency === 'EUR' ? '€' : request.currency === 'GBP' ? '£' : ''}{typeof request.amount === 'number' ? request.amount.toFixed(2) : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant={(() => {
-                      const s = request.status;
-                      if (s === RefundStatus.PENDING_AGENT_REVIEW) return 'agent-pending';
-                      if (s === RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) return 'warning';
-                      if (s === RefundStatus.PENDING_LEAD_APPROVAL) return 'lead-pending';
-                      if (s === RefundStatus.PENDING_FINAL_APPROVAL) return 'supervisor-pending';
-                      if (s === RefundStatus.APPROVED_FOR_PAYMENT) return 'approved';
-                      if (s === RefundStatus.PAYMENT_PROCESSING) return 'processing';
-                      if (s === RefundStatus.PAID) return 'success';
-                      if (s === RefundStatus.AWAITING_CLIENT_VALIDATION || s === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO) return 'client-action';
-                      if (s.includes('REJECT') || s.includes('CANCEL')) return 'destructive';
-                      return 'default';
-                    })()} className="text-xs">
-                      {request.status ? request.status.replace(/_/g, ' ') : 'N/A'}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{new Date(request.updatedAt).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
+            <LeadTableBody refundRequests={refundRequests} />
           </table>
         </div>
       )}

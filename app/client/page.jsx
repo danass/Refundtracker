@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefundStatus } from '@prisma/client';
-import PaginationControls from '@/components/PaginationControls';
+import PaginationControls from '@/app/components/PaginationControls';
 
 const SIMULATED_CLIENT_EMAIL = 'alice.wonder@example.com';
 const ITEMS_PER_PAGE = 10;

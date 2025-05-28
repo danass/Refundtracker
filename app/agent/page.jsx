@@ -1,15 +1,43 @@
+'use client';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma.js';
-import { RefundStatus } from '@prisma/client';
+import { RefundStatus, UserRole } from '@prisma/client';
 import PaginationControls from '@/components/PaginationControls';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import AgentTableBody from '@/components/dashboard/AgentTableBody';
+import FilterButton from '@/components/ui/FilterButton';
+// import { useRouter, useSearchParams } from 'next/navigation'; // Keep commented for Server Component
 
 const ITEMS_PER_PAGE = 10;
 
+// Helper function to get unique agents
+async function getAgents() {
+  try {
+    const agents = await prisma.user.findMany({
+      where: { role: UserRole.AGENT },
+      select: {
+        id: true,
+        name: true, // Assuming a 'name' field
+        email: true // Fallback or primary identifier
+      },
+      orderBy: { name: 'asc' } // Or email, or another suitable field
+    });
+    return agents.map(agent => ({
+      value: agent.id,
+      label: agent.name || agent.email // Use name if available, else email
+    }));
+  } catch (error) {
+    console.error("Failed to fetch agents:", error);
+    return []; // Return empty array on error to prevent crashes
+  }
+}
+
+// AgentDashboard is a Server Component, so we cannot use client-side hooks like useRouter directly here.
+// The onValueChange handlers in FilterButton will use window.location.search for now.
 export default async function AgentDashboard({ searchParams: searchParamsInput }) {
+  // Await searchParams directly from props
   const searchParams = await searchParamsInput;
 
   let refundRequests = [];
@@ -18,6 +46,27 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
   const currentPage = Number(searchParams?.page) || 1;
   const searchQuery = searchParams?.q || '';
   const tab = searchParams?.tab || 'assigned';
+
+  // Filter values from searchParams
+  const statusFilter = searchParams?.status || '';
+  const dateFilter = searchParams?.date || ''; // Placeholder, needs actual date handling
+  const amountFilter = searchParams?.amount || ''; // Placeholder, needs actual amount handling
+  const agentFilter = searchParams?.agent || '';
+
+  const agents = await getAgents();
+
+  const statusOptions = Object.values(RefundStatus).map(status => ({ value: status, label: status.replace(/_/g, ' ') }));
+  // Placeholder options for Date and Amount - these would be more complex
+  const dateOptions = [
+    { value: 'today', label: 'Today' },
+    { value: 'this_week', label: 'This Week' },
+    { value: 'this_month', label: 'This Month' },
+  ];
+  const amountOptions = [
+    { value: '0-100', label: '$0 - $100' },
+    { value: '101-500', label: '$101 - $500' },
+    { value: '501+', label: '$501+' },
+  ];
 
   // Filtering logic
   const whereConditions = [];
@@ -42,6 +91,20 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
         { id: { contains: searchQuery, mode: 'insensitive' } },
       ],
     });
+  }
+
+  // Apply filters to whereConditions
+  if (statusFilter) {
+    whereConditions.push({ status: statusFilter });
+  }
+  // TODO: Implement proper date filtering based on dateFilter value
+  // if (dateFilter) { ... }
+  // TODO: Implement proper amount filtering based on amountFilter value
+  // if (amountFilter) { ... }
+  if (agentFilter) {
+    // This assumes you have an `agentId` or similar field on RefundRequest
+    // and that agentFilter value is the agent's ID.
+    whereConditions.push({ agentId: agentFilter }); 
   }
 
   const finalWhere = whereConditions.length > 0 ? { AND: whereConditions } : {};
@@ -85,7 +148,7 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
         </Button>
       </div>
       <div className="mb-6">
-        <form method="GET" action="/agent" className="flex gap-3 items-center">
+        <form method="GET" action="/agent" className="flex gap-3 items-center mb-4">
           <Input
             type="text"
             name="q"
@@ -94,10 +157,63 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
             className="max-w-sm border-slate-300 focus:border-slate-500 focus:ring-slate-500"
           />
           {tab && <input type="hidden" name="tab" value={tab} />}
+          {/* Hidden inputs to carry over filter values on search submit */} 
+          {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
+          {dateFilter && <input type="hidden" name="date" value={dateFilter} />}
+          {amountFilter && <input type="hidden" name="amount" value={amountFilter} />}
+          {agentFilter && <input type="hidden" name="agent" value={agentFilter} />}
+
           <Button type="submit" variant="outline" className="border-slate-300 text-slate-700 hover:bg-slate-50">
             Search
           </Button>
         </form>
+        {/* Filter Buttons */}
+        <div className="flex space-x-2">
+          <FilterButton
+            label="Status"
+            options={statusOptions}
+            selectedValue={statusFilter}
+            onValueChange={(value) => {
+              const params = new URLSearchParams(searchParams);
+              if (value) params.set('status', value); else params.delete('status');
+              params.set('page', '1');
+              window.location.search = params.toString();
+            }}
+          />
+          <FilterButton
+            label="Date"
+            options={dateOptions}
+            selectedValue={dateFilter}
+            onValueChange={(value) => {
+              const params = new URLSearchParams(searchParams);
+              if (value) params.set('date', value); else params.delete('date');
+              params.set('page', '1');
+              window.location.search = params.toString();
+            }}
+          />
+          <FilterButton
+            label="Amount"
+            options={amountOptions}
+            selectedValue={amountFilter}
+            onValueChange={(value) => {
+              const params = new URLSearchParams(searchParams);
+              if (value) params.set('amount', value); else params.delete('amount');
+              params.set('page', '1');
+              window.location.search = params.toString();
+            }}
+          />
+          <FilterButton
+            label="Agent"
+            options={agents}
+            selectedValue={agentFilter}
+            onValueChange={(value) => {
+              const params = new URLSearchParams(searchParams);
+              if (value) params.set('agent', value); else params.delete('agent');
+              params.set('page', '1');
+              window.location.search = params.toString();
+            }}
+          />
+        </div>
       </div>
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
