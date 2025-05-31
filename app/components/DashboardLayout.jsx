@@ -70,7 +70,7 @@ export default function DashboardLayout({ children }) {
   const navItems = [...baseNavItems, ...roleSpecificNavItems, ...commonNavItems];
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 font-sans" key={pathname}>
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 font-sans">
       <aside className="w-full md:w-64 bg-white p-6 shadow-lg md:shadow-none md:border-r border-slate-200 flex flex-col">
         <div className="mb-8">
           <Link href="/overview" className="flex items-center space-x-2 text-2xl font-semibold text-slate-800 hover:text-slate-900 transition-colors">

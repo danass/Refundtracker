@@ -1,4 +1,4 @@
-'use client';
+// 'use client'; // This directive should be removed
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma.js';
 import { RefundStatus, UserRole } from '@prisma/client';
@@ -104,7 +104,7 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
   if (agentFilter) {
     // This assumes you have an `agentId` or similar field on RefundRequest
     // and that agentFilter value is the agent's ID.
-    whereConditions.push({ agentId: agentFilter }); 
+    whereConditions.push({ assignedAgentId: agentFilter }); 
   }
 
   const finalWhere = whereConditions.length > 0 ? { AND: whereConditions } : {};
@@ -168,50 +168,30 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
           </Button>
         </form>
         {/* Filter Buttons */}
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2 items-center">
           <FilterButton
             label="Status"
             options={statusOptions}
             selectedValue={statusFilter}
-            onValueChange={(value) => {
-              const params = new URLSearchParams(searchParams);
-              if (value) params.set('status', value); else params.delete('status');
-              params.set('page', '1');
-              window.location.search = params.toString();
-            }}
+            paramName="status"
           />
           <FilterButton
             label="Date"
             options={dateOptions}
             selectedValue={dateFilter}
-            onValueChange={(value) => {
-              const params = new URLSearchParams(searchParams);
-              if (value) params.set('date', value); else params.delete('date');
-              params.set('page', '1');
-              window.location.search = params.toString();
-            }}
+            paramName="date"
           />
           <FilterButton
             label="Amount"
             options={amountOptions}
             selectedValue={amountFilter}
-            onValueChange={(value) => {
-              const params = new URLSearchParams(searchParams);
-              if (value) params.set('amount', value); else params.delete('amount');
-              params.set('page', '1');
-              window.location.search = params.toString();
-            }}
+            paramName="amount"
           />
           <FilterButton
             label="Agent"
             options={agents}
             selectedValue={agentFilter}
-            onValueChange={(value) => {
-              const params = new URLSearchParams(searchParams);
-              if (value) params.set('agent', value); else params.delete('agent');
-              params.set('page', '1');
-              window.location.search = params.toString();
-            }}
+            paramName="agent"
           />
         </div>
       </div>

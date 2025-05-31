@@ -1,4 +1,4 @@
-'use client'
+// 'use client' // This directive should be removed
 import { prisma } from '@/lib/prisma.js';
 import { RefundStatus } from '@prisma/client';
 import Link from 'next/link';
