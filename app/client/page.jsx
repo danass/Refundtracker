@@ -1,130 +1,150 @@
 import { prisma } from '@/lib/prisma.js';
 import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { cookies } from 'next/headers';
 import { RefundStatus } from '@prisma/client';
-import PaginationControls from '@/app/components/PaginationControls';
+import { ArrowRight, CheckCircle2, Clock, AlertCircle, Inbox } from 'lucide-react';
 
-const SIMULATED_CLIENT_EMAIL = 'alice.wonder@example.com';
-const ITEMS_PER_PAGE = 10;
+const FALLBACK_CLIENT_EMAIL = 'alice.wonder@example.com';
 
-export default async function ClientDashboardPage({ searchParams: searchParamsInput }) {
-  const searchParams = await searchParamsInput;
+async function getDemoUser() {
+  try {
+    const c = await cookies();
+    const raw = c.get('demo_user')?.value;
+    if (!raw) return null;
+    return JSON.parse(decodeURIComponent(raw));
+  } catch {
+    return null;
+  }
+}
+
+async function getClientEmail() {
+  const u = await getDemoUser();
+  return u?.email || FALLBACK_CLIENT_EMAIL;
+}
+
+async function getClientFirstName() {
+  const u = await getDemoUser();
+  return u?.name?.split(' ')[0] || 'Alice';
+}
+
+function clientStatus(status, hasIban) {
+  if (!hasIban && [
+    RefundStatus.PENDING_AGENT_REVIEW,
+    RefundStatus.RETURNED_TO_AGENT_FOR_EDITS,
+  ].includes(status)) {
+    return { label: 'Action requise', sub: 'Vos coordonnées bancaires sont attendues', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-400', urgent: true };
+  }
+  if ([RefundStatus.PENDING_AGENT_REVIEW, RefundStatus.RETURNED_TO_AGENT_FOR_EDITS, RefundStatus.CLIENT_VALIDATED].includes(status))
+    return { label: 'En cours de traitement', sub: 'Votre dossier est examiné par notre équipe', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', dot: 'bg-blue-400' };
+  if ([RefundStatus.AWAITING_CLIENT_VALIDATION, RefundStatus.RETURNED_TO_CLIENT_FOR_INFO].includes(status))
+    return { label: 'Action requise', sub: 'Nous attendons votre réponse', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-400', urgent: true };
+  if ([RefundStatus.PENDING_LEAD_APPROVAL, RefundStatus.PENDING_FINAL_APPROVAL].includes(status))
+    return { label: 'En cours de validation', sub: 'Votre dossier est en examen approfondi', color: 'text-violet-700', bg: 'bg-violet-50', border: 'border-violet-200', dot: 'bg-violet-400' };
+  if ([RefundStatus.APPROVED_FOR_PAYMENT, RefundStatus.PAYMENT_PROCESSING].includes(status))
+    return { label: 'Remboursement en cours', sub: 'Le virement est en cours d\'exécution', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-400' };
+  if (status === RefundStatus.PAID)
+    return { label: 'Remboursé', sub: 'Le virement a été effectué sur votre compte', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500', done: true };
+  if (status?.includes('REJECT') || status?.includes('CANCEL'))
+    return { label: 'Dossier clôturé', sub: 'Votre demande n\'a pas pu être traitée', color: 'text-gray-500', bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-300' };
+  return { label: 'En cours', sub: '', color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-300' };
+}
+
+export default async function ClientDashboardPage() {
+  const clientEmail = await getClientEmail();
+  const firstName = await getClientFirstName();
   let requests = [];
-  let totalRequests = 0;
-  let error = null;
-  const currentPage = Number(searchParams?.page) || 1;
 
   try {
-    const whereClause = {
-      clientEmail: SIMULATED_CLIENT_EMAIL 
-      // OR: [
-      //   { clientEmail: SIMULATED_CLIENT_EMAIL },
-      //   { id: 'REPLACE_WITH_A_CLIENT_REQUEST_ID_FROM_SEED' }
-      // ],
-    };
-
-    totalRequests = await prisma.refundRequest.count({ where: whereClause });
-
     requests = await prisma.refundRequest.findMany({
-      where: whereClause,
-      orderBy: {
-        updatedAt: 'desc',
-      },
-      skip: (currentPage - 1) * ITEMS_PER_PAGE,
-      take: ITEMS_PER_PAGE,
-      include: {},
+      where: { clientEmail },
+      orderBy: { createdAt: 'desc' },
     });
   } catch (e) {
-    console.error("Failed to fetch client refund requests:", e);
-    error = "Could not load your refund requests at this time. Please try again later.";
+    console.error(e);
   }
 
-  const getStatusVariant = (status) => {
-    if (status.includes('REJECT') || status.includes('CANCEL')) return 'destructive';
-    if (status.includes('PAID') || status.includes('APPROVED')) return 'success';
-    if (status.includes('AWAITING') || status.includes('RETURNED_TO_CLIENT')) return 'warning';
-    return 'default';
-  };
+  const active = requests.filter(r => r.status !== RefundStatus.PAID && !r.status?.includes('REJECT') && !r.status?.includes('CANCEL'));
+  const done = requests.filter(r => r.status === RefundStatus.PAID || r.status?.includes('REJECT') || r.status?.includes('CANCEL'));
+
+  const sym = (currency) => currency === 'EUR' ? '€' : currency === 'USD' ? '$' : currency === 'GBP' ? '£' : currency;
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-4xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-800">My Refund Requests</h1>
-        {/* Future: Button to initiate a new request for client? */}
+    <div className="max-w-xl mx-auto px-5 py-10">
+      {/* Greeting */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Bonjour, {firstName}</h1>
+        <p className="text-sm text-gray-400 mt-1">Voici le suivi de vos remboursements</p>
       </div>
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-6 rounded-md shadow-sm" role="alert">
-          <p className="font-semibold">Error Loading Requests</p>
-          <p className="text-sm">{error}</p>
+
+      {requests.length === 0 && (
+        <div className="text-center py-20 bg-white rounded-2xl border" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+          <Inbox className="w-8 h-8 text-gray-200 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-400">Aucune demande en cours</p>
+          <p className="text-xs text-gray-300 mt-1">Vos futures demandes apparaîtront ici</p>
         </div>
       )}
-      {requests.length === 0 && !error && (
-        <div className="text-center py-16 bg-white rounded-lg shadow-md border border-slate-200">
-          <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h2 className="mt-5 text-xl font-semibold text-slate-700">No Refund Requests Found</h2>
-          <p className="mt-2 text-sm text-slate-500">You haven't submitted any refund requests yet.</p>
+
+      {/* Active requests */}
+      {active.length > 0 && (
+        <div className="space-y-3 mb-8">
+          {active.map(r => {
+            const cs = clientStatus(r.status, !!r.iban);
+            return (
+              <Link
+                key={r.id}
+                href={`/refunds/${r.id}?simulatedRole=client`}
+                className={`flex items-center gap-4 p-4 rounded-2xl border bg-white hover:shadow-md transition-all ${cs.urgent ? 'ring-2 ring-amber-200' : ''}`}
+                style={{ borderColor: cs.urgent ? 'rgb(253,230,138)' : 'hsl(220,13%,89%)' }}
+              >
+                {/* Status dot */}
+                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${cs.dot} ${!cs.done ? 'animate-pulse' : ''}`} />
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-lg font-bold text-gray-900">
+                      {sym(r.currency)}{r.amount?.toFixed(2)}
+                    </span>
+                    <span className="text-xs text-gray-400">{r.currency} · {r.ticketId}</span>
+                  </div>
+                  <p className={`text-sm font-medium mt-0.5 ${cs.color}`}>{cs.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{cs.sub}</p>
+                </div>
+
+                <ArrowRight className={`w-4 h-4 shrink-0 ${cs.urgent ? 'text-amber-400' : 'text-gray-300'}`} />
+              </Link>
+            );
+          })}
         </div>
       )}
-      {requests.length > 0 && !error && (
-        <div className="bg-white shadow-md rounded-lg border border-slate-200 overflow-hidden">
-          <ul className="divide-y divide-slate-200">
-            {requests.map((request) => (
-              <li key={request.id} className="hover:bg-slate-50/50 transition-colors duration-150">
+
+      {/* Closed requests */}
+      {done.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Dossiers terminés</p>
+          <div className="space-y-2">
+            {done.map(r => {
+              const cs = clientStatus(r.status, !!r.iban);
+              return (
                 <Link
-                  href={`/refunds/${request.id}?simulatedRole=client`}
-                  className="block p-5 sm:p-6 focus:outline-none focus:bg-slate-100/70 group"
-                  >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-slate-600 group-hover:text-slate-800 transition-colors duration-150">
-                      Request ID: <span className="text-slate-800 group-hover:text-slate-900">{request.ticketId || request.id}</span>
-                    </p>
-                    <Badge variant={(() => {
-                      const s = request.status;
-                      if (s === RefundStatus.PENDING_AGENT_REVIEW) return 'agent-pending'; // Or a generic 'pending'
-                      if (s === RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) return 'warning';
-                      if (s === RefundStatus.PENDING_LEAD_APPROVAL) return 'lead-pending'; // Or a generic 'pending'
-                      if (s === RefundStatus.PENDING_FINAL_APPROVAL) return 'supervisor-pending'; // Or a generic 'pending'
-                      if (s === RefundStatus.APPROVED_FOR_PAYMENT) return 'approved';
-                      if (s === RefundStatus.PAYMENT_PROCESSING) return 'processing';
-                      if (s === RefundStatus.PAID) return 'success';
-                      if (s === RefundStatus.AWAITING_CLIENT_VALIDATION || s === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO) return 'client-action';
-                      if (s.includes('REJECT') || s.includes('CANCEL')) return 'destructive';
-                      return 'default';
-                    })()} className="text-xs">
-                      {request.status ? request.status.replace(/_/g, ' ') : 'N/A'}
-                    </Badge>
+                  key={r.id}
+                  href={`/refunds/${r.id}?simulatedRole=client`}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-white hover:bg-gray-50 transition-colors"
+                  style={{ borderColor: 'hsl(220,13%,89%)' }}
+                >
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${r.status === RefundStatus.PAID ? 'text-emerald-500' : 'text-gray-300'}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-gray-700">
+                      {sym(r.currency)}{r.amount?.toFixed(2)} {r.currency}
+                    </span>
+                    <span className="text-xs text-gray-400 ml-2">{cs.label}</span>
                   </div>
-                  <div className="mt-1.5 text-sm text-slate-600 group-hover:text-slate-700 transition-colors duration-150">
-                     Reason: {request.reason && request.reason.length > 70 ? request.reason.substring(0, 70) + '...' : request.reason || 'Not specified'}
-                  </div>
-                  <div className="mt-4 sm:flex sm:justify-between text-xs text-slate-500 group-hover:text-slate-600 transition-colors duration-150">
-                    <p className="flex items-center">
-                      Amount: <span className="font-medium text-slate-700 group-hover:text-slate-800 ml-1">{request.currency === 'USD' ? '$' : request.currency === 'EUR' ? '€' : request.currency === 'GBP' ? '£' : ''}{request.amount.toFixed(2)} {request.currency}</span>
-                    </p>
-                    <p className="mt-1.5 sm:mt-0 flex items-center">
-                      <svg className="flex-shrink-0 mr-1.5 h-4 w-4 text-slate-400 group-hover:text-slate-500 transition-colors duration-150" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                      </svg>
-                      Last updated: <time dateTime={request.updatedAt} className="ml-1">{new Date(request.updatedAt).toLocaleString()}</time>
-                    </p>
-                  </div>
-                   {(request.status === RefundStatus.AWAITING_CLIENT_VALIDATION || request.status === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO) && (
-                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded-md">
-                            <p className="text-xs font-semibold text-yellow-800">Action Required: <span className="font-normal text-yellow-700">Please review and {request.status === RefundStatus.AWAITING_CLIENT_VALIDATION ? 'confirm your details.' : 'provide the requested information.'}</span></p>
-                        </div>
-                    )}
+                  <span className="text-xs text-gray-300">{new Date(r.updatedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
                 </Link>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
         </div>
-      )}
-      {requests.length > 0 && !error && (
-        <PaginationControls totalItems={totalRequests} itemsPerPage={ITEMS_PER_PAGE} />
       )}
     </div>
   );
-} 
+}

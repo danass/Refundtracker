@@ -8,17 +8,17 @@ export default function ActionButton({
   refundRequestId,
   actorName,
   comment,
-  commentFieldName = 'actionComment', // Default field name for the comment
+  commentFieldName = 'actionComment',
   buttonText,
-  processingText = 'Processing...',
-  successText = 'Action Complete!', // Updated default
-  variant = 'default', // Added variant prop, defaults to shadcn's default
-  buttonClassName = '', // Allow additional custom classes
-  // Or for a secondary button: 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
+  processingText = 'Traitement…',
+  successText = 'Action effectuée',
+  variant = 'default',
+  buttonClassName = '',
   requiresComment = false,
   additionalFormData = {},
-  onSuccess, // Optional callback on success
-  children, // To allow passing content like icons
+  onSuccess,
+  children,
+  icon,
 }) {
   const initialState = { error: null, success: false, message: '' };
   // The serverAction will receive (prevState, formData)
@@ -62,14 +62,24 @@ export default function ActionButton({
 
   return (
     <form action={formAction} style={{ display: 'inline-block' }}> {/* Form per button approach */}
-      <Button
+      <button
         type="submit"
-        variant={variant}
         disabled={isButtonDisabled}
-        className={buttonClassName} // Apply additional classes
+        className={
+          buttonClassName ||
+          (variant === 'destructive'
+            ? 'px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+            : variant === 'outline'
+            ? 'px-4 py-2 rounded-lg text-sm font-medium border text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+            : 'px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors')
+        }
+        style={!buttonClassName && variant !== 'destructive' && variant !== 'outline' ? {} : undefined}
       >
+        {icon && !isPending && !state.success && (
+          <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold shrink-0">{icon}</span>
+        )}
         {isPending ? processingText : (state.success ? successText : (children || buttonText))}
-      </Button>
+      </button>
       {/* General error display, if not handled by field-specific errors from the action */}
       {state.error && !state.fieldErrors && !state.success && (
         <p className="mt-1 text-xs text-destructive">Error: {state.error}</p>

@@ -28,8 +28,8 @@ export default function PaginationControls({ totalItems, itemsPerPage = ITEMS_PE
   return (
     <div className="flex items-center justify-between mt-8 py-4 border-t border-slate-200">
       <div className="text-sm text-slate-600">
-        Page <span className="font-semibold text-slate-800">{currentPage}</span> of <span className="font-semibold text-slate-800">{totalPages}</span>
-        <span className="ml-2 text-slate-500">({totalItems} total requests)</span>
+        Page <span className="font-semibold text-slate-800">{currentPage}</span> sur <span className="font-semibold text-slate-800">{totalPages}</span>
+        <span className="ml-2 text-slate-500">({totalItems} demandes au total)</span>
       </div>
       <div className="flex items-center space-x-2">
         <Button
@@ -40,7 +40,7 @@ export default function PaginationControls({ totalItems, itemsPerPage = ITEMS_PE
           className="text-slate-700 hover:bg-slate-50 disabled:text-slate-400 disabled:border-slate-200"
         >
           <ChevronLeft className="h-4 w-4 mr-1.5" />
-          Previous
+          Précédent
         </Button>
         <Button
           variant="outline"
@@ -49,7 +49,7 @@ export default function PaginationControls({ totalItems, itemsPerPage = ITEMS_PE
           disabled={currentPage === totalPages}
           className="text-slate-700 hover:bg-slate-50 disabled:text-slate-400 disabled:border-slate-200"
         >
-          Next
+          Suivant
           <ChevronRight className="h-4 w-4 ml-1.5" />
         </Button>
       </div>

@@ -1,454 +1,467 @@
-// 'use client'; // This page should be a Server Component
-import { prisma } from '@/lib/prisma.js';
-import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
-// Button might still be used by BackButton or other general UI here
-// import { Button } from '@/components/ui/button'; 
 import { getRefundRequestWithHistory } from '@/lib/query';
 import { notFound } from 'next/navigation';
-import ClientSubmitInfoForm from '@/components/refund-actions/ClientSubmitInfoForm';
-// ClientEditDetailsForm is now used within ClientValidationAndEditForm or standalone for other statuses
-import ClientEditDetailsForm from '@/components/refund-actions/ClientEditDetailsForm'; 
-import ActionsPanel from '@/components/refund-actions/ActionsPanel';
-import NoteDisplayItem from '@/components/NoteDisplayItem';
-import UpdateInternalNotesForm from '@/components/refund-actions/UpdateInternalNotesForm';
-import { RefundStatus } from '@prisma/client'; // This is fine in Server Components
+import { RefundStatus } from '@prisma/client';
+import { getStatusVariant, getStatusLabel } from '@/lib/utils';
 import {
   agentActionConfigurations,
   leadActionConfigurations,
   supervisorActionConfigurations,
   financeActionConfigurations,
-  adminActionConfigurations
+  adminActionConfigurations,
 } from '@/lib/actionConfigs.js';
-import { AlertTriangle, InfoIcon } from 'lucide-react'; // ArrowLeft might be in BackButton
+import { AlertTriangle, Info, User, CreditCard, FileText, Lock, Clock, ArrowLeft, Building2, CheckCircle2, XCircle, Circle, Send } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
 import Tooltip from '@/components/ui/Tooltip';
-import { getStatusVariant } from '@/lib/utils';
-import BackButton from '@/components/ui/BackButton';
-
-// Import the new Client Component for the combined form
+import ActionsPanel from '@/components/refund-actions/ActionsPanel';
+import FinancePaymentPanel from '@/components/refund-actions/FinancePaymentPanel';
+import UpdateInternalNotesForm from '@/components/refund-actions/UpdateInternalNotesForm';
 import ClientValidationAndEditForm from '@/components/refund-actions/ClientValidationAndEditForm';
-// InfoCard is assumed to be a general UI component, ensure it's correctly located or defined.
-// If InfoCard is defined in this file, it needs to be extracted if it uses client hooks or passed as children to client components.
-// For now, assuming it's a simple presentational component or correctly structured.
+import ClientEditDetailsForm from '@/components/refund-actions/ClientEditDetailsForm';
+import ClientSubmitInfoForm from '@/components/refund-actions/ClientSubmitInfoForm';
+import BackButton from '@/components/ui/BackButton';
+import ClientProvideIbanForm from '@/components/refund-actions/ClientProvideIbanForm';
+import ClientRefundView from '@/components/ClientRefundView';
 
-// Removed client-specific hooks from page component:
-// import { useActionState, useEffect, useState, useTransition } from 'react';
-// import { clientValidateRequest } from '@/actions/clientActions'; 
-// import { toast } from 'sonner';
-// import { useFormStatus } from 'react-dom';
+// ── Helpers ──────────────────────────────────────────────────────────
 
-import { InfoCard } from '@/components/ui/InfoCard'; // Updated import path
-
-function getDashboardPath(role) {
-  switch (role) {
-    case 'agent': return '/agent';
-    case 'lead':
-    case 'team_lead': return '/lead';
-    case 'supervisor': return '/supervisor';
-    case 'finance': return '/finance';
-    case 'client': return '/client'; 
-    default: return '/';
-  }
+function timelineColor(status) {
+  if (!status) return '#9ca3af';
+  if (status.includes('REJECT') || status.includes('CANCEL') || status.includes('ERROR')) return '#ef4444';
+  if (status.includes('PAID') || status.includes('APPROVED')) return '#10b981';
+  if (status.includes('RETURNED')) return '#f97316';
+  if (status.includes('PENDING') || status.includes('AWAITING')) return '#f59e0b';
+  return '#6b7280';
 }
 
-// InfoCard definition removed from here
+// ── Sub-components ────────────────────────────────────────────────────
 
-function InfoItem({ label, value, isBadge, badgeVariant = 'default', children }) {
+function Section({ icon: Icon, title, children, flush = false }) {
   return (
-    <div className="grid grid-cols-3 gap-2 items-start">
-      <dt className="text-sm font-medium text-slate-500">{label}</dt>
-      <dd className="text-sm text-slate-900 col-span-2 flex items-center space-x-2">
-        {isBadge ? (
-          <Badge variant={badgeVariant} className="text-xs">
-            {value ? String(value).replace(/_/g, ' ') : 'N/A'}
-          </Badge>
-        ) : (
-          value || 'N/A'
-        )}
+    <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+      <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+        {Icon && <Icon className="w-3.5 h-3.5 text-gray-400" />}
+        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{title}</span>
+      </div>
+      <div className={flush ? '' : 'px-5 py-4 space-y-3'}>{children}</div>
+    </div>
+  );
+}
+
+function Row({ label, children, warn, info }) {
+  return (
+    <div className="flex items-start gap-3 py-0.5">
+      <dt className="w-40 shrink-0 text-xs text-gray-400 pt-0.5 leading-5">{label}</dt>
+      <dd className="flex-1 text-sm text-gray-900 flex items-center gap-1.5 flex-wrap">
         {children}
+        {warn && (
+          <Tooltip text={warn}>
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          </Tooltip>
+        )}
+        {info && (
+          <Tooltip text={info}>
+            <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          </Tooltip>
+        )}
       </dd>
     </div>
   );
 }
 
-function JourneyItem({ entry, isLast }) {
-    const getTimelineColor = (status) => {
-      if (!status) return 'bg-gray-400';
-      if (status.includes('REJECT') || status.includes('CANCEL')) return 'bg-red-500';
-      if (status.includes('PAID') || status.includes('APPROVE')) return 'bg-green-500';
-      if (status.includes('AWAITING') || status.includes('PENDING')) return 'bg-yellow-500';
-      if (status.includes('RETURNED') || status.includes('ESCALATE')) return 'bg-orange-500';
-      return 'bg-gray-400'; 
-    };
+function Empty({ label = '—' }) {
+  return <span className="text-gray-300">{label}</span>;
+}
+
+function CheckItem({ ok, warn, label, detail }) {
+  const icon = ok
+    ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+    : warn
+    ? <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+    : <Circle className="w-4 h-4 text-gray-200 shrink-0 mt-0.5" />;
   return (
-    <li className="relative pl-5 pr-2 py-1 mb-4"> 
-      <div 
-        className={`absolute left-0 top-[0.5rem] w-3 h-3 ${getTimelineColor(entry.newStatus || entry.actionDescription || 'DEFAULT')} rounded-full border-2 border-white shadow-sm`}
-      ></div>
-      {!isLast && (
-        <div 
-          className={`absolute left-[5px] w-[2px] top-[calc(0.5rem_+_12px)] bottom-[-0.5rem] ${getTimelineColor(entry.newStatus || entry.actionDescription || 'DEFAULT')}`} 
-        ></div>
-      )}
-      <div className="ml-3">
-        <time className="mb-1 text-xs font-normal leading-none text-slate-400">
-          {(entry.createdAt && !isNaN(new Date(entry.createdAt).valueOf())) ? new Date(entry.createdAt).toLocaleString() : 'Date N/A'} by {entry.changedBy || 'System'}
-        </time>
-        <h3 className="text-sm font-semibold text-slate-800 mt-0.5">
-          Status changed to: <span className="font-bold">{entry.newStatus ? entry.newStatus.replace(/_/g, ' ') : (entry.actionDescription || 'Update')}</span>
-          {entry.newStatus && entry.oldStatus && <span className="text-xs text-slate-500"> (from {entry.oldStatus.replace(/_/g, ' ')})</span>}
-        </h3>
-        {(entry.notes) && 
-          <p className="text-xs italic text-slate-600 mt-1 bg-slate-50 p-2 rounded-md border border-slate-200">
-            Details: "{entry.notes}"
+    <div className="flex items-start gap-2.5 py-1.5">
+      {icon}
+      <div>
+        <p className={`text-sm font-medium ${ok ? 'text-gray-700' : warn ? 'text-amber-700' : 'text-gray-400'}`}>{label}</p>
+        {detail && <p className={`text-xs mt-0.5 ${ok ? 'text-gray-400' : warn ? 'text-amber-600' : 'text-gray-300'}`}>{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
+function TimelineEntry({ entry, isLast }) {
+  const color = timelineColor(entry.newStatus || '');
+  return (
+    <li className="flex gap-3 pb-4 last:pb-0">
+      <div className="flex flex-col items-center shrink-0">
+        <div className="w-2.5 h-2.5 rounded-full mt-1 shrink-0" style={{ background: color }} />
+        {!isLast && <div className="w-px flex-1 mt-1" style={{ background: 'hsl(220,13%,91%)' }} />}
+      </div>
+      <div className="flex-1 min-w-0 pb-0.5">
+        <p className="text-sm font-medium text-gray-800 leading-snug">
+          {entry.newStatus ? getStatusLabel(entry.newStatus) : entry.actionDescription}
+        </p>
+        {entry.oldStatus && (
+          <p className="text-xs text-gray-400">depuis : {getStatusLabel(entry.oldStatus)}</p>
+        )}
+        <p className="text-xs text-gray-400 mt-0.5">
+          {entry.createdAt && !isNaN(new Date(entry.createdAt))
+            ? new Date(entry.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+            : 'Date inconnue'}
+          {entry.changedBy ? ` · ${entry.changedBy}` : ''}
+        </p>
+        {entry.notes && (
+          <p className="mt-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded border" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+            {entry.notes}
           </p>
-        }
+        )}
       </div>
     </li>
   );
 }
 
-// Removed ClientValidationAndEditForm from here, it's now imported
+// ── Page ──────────────────────────────────────────────────────────────
 
 export default async function RefundRequestDetail({ params, searchParams: searchParamsProp }) {
-  // ... (initial data fetching and variable setup remains the same)
   const searchParams = await searchParamsProp;
-  const simulatedRole = searchParams?.simulatedRole || 'client';
-  const actorName = `Simulated ${simulatedRole.charAt(0).toUpperCase() + simulatedRole.slice(1)}`;
   const { id } = await params;
+  const simulatedRole = searchParams?.simulatedRole || 'client';
 
   const refundRequest = await getRefundRequestWithHistory(id);
+  if (!refundRequest) notFound();
 
-  if (!refundRequest) {
-    notFound();
-  }
+  const r = refundRequest;
 
-  const requestData = { ...refundRequest };
-  requestData.currencySymbol = requestData.currency === 'USD' ? '$' : requestData.currency === 'EUR' ? '€' : requestData.currency === 'GBP' ? '£' : '';
+  // Client gets a fully different experience
+  if (simulatedRole === 'client') return <ClientRefundView r={r} />;
 
-  const isClientAddressMismatch = requestData.clientAddress !== requestData.originalClientAddress;
-  const isClientFirstNameMismatch = requestData.clientFirstName !== requestData.originalClientFirstName;
-  const isClientLastNameMismatch = requestData.clientLastName !== requestData.originalClientLastName;
+  const sym = r.currency === 'EUR' ? '€' : r.currency === 'USD' ? '$' : r.currency === 'GBP' ? '£' : r.currency;
 
-  const hasAgentNotes = requestData.agentNotes && requestData.agentNotes.trim() !== '';
-  const hasClientValidationDetails = requestData.clientValidationDetails && requestData.clientValidationDetails.trim() !== '';
-  const hasLeadComments = requestData.leadComments && requestData.leadComments.trim() !== '';
-  const hasSupervisorNotes = requestData.supervisorNotes && requestData.supervisorNotes.trim() !== '';
-  const hasFinanceNotes = requestData.financeNotes && requestData.financeNotes.trim() !== '';
-  const hasRejectionReason = requestData.rejectionReason && requestData.rejectionReason.trim() !== '';
-  const hasAnyNotes = hasAgentNotes || hasClientValidationDetails || hasLeadComments || hasSupervisorNotes || hasFinanceNotes || hasRejectionReason;
+  const nameMismatch = r.clientFirstName !== r.originalClientFirstName || r.clientLastName !== r.originalClientLastName;
+  const addressMismatch = r.clientAddress && r.originalClientAddress && r.clientAddress !== r.originalClientAddress;
+  const amountOver = r.originalOrderAmount != null && r.amount > r.originalOrderAmount;
+  const amountUnder = r.originalOrderAmount != null && r.amount < r.originalOrderAmount;
 
-  const isClientView = simulatedRole === 'client';
-  const isAgentView = simulatedRole === 'agent';
-  const isLeadView = simulatedRole === 'team_lead' || simulatedRole === 'lead';
-  const isSupervisorView = simulatedRole === 'supervisor';
-  const isFinanceView = simulatedRole === 'finance';
-  const isAdminView = simulatedRole === 'admin';
+  const isClient = simulatedRole === 'client';
+  const isAgent = simulatedRole === 'agent';
+  const isLead = simulatedRole === 'team_lead' || simulatedRole === 'lead';
+  const isSupervisor = simulatedRole === 'supervisor';
+  const isFinance = simulatedRole === 'finance';
+  const isAdmin = simulatedRole === 'admin';
+  const isInternal = !isClient;
+
+  const actorName = isAgent ? 'Marc Lefèvre' : isLead ? 'Vanessa Durand' : isSupervisor ? 'Éric Bertrand' : isFinance ? 'Isabelle Roux' : 'Client';
+
+  const TERMINAL = [RefundStatus.PAID, RefundStatus.REJECTED_BY_AGENT, RefundStatus.REJECTED_BY_LEAD, RefundStatus.REJECTED_BY_SUPERVISOR, RefundStatus.CANCELLED_BY_CLIENT, RefundStatus.CANCELLED_BY_AGENT];
+  const isTerminal = TERMINAL.includes(r.status);
+
+  // Show the Stripe-styled inline payment panel for finance whenever the refund
+  // is in the payment lifecycle (approved, processing, or just paid). Keeping it
+  // visible across these statuses avoids flickering between the trigger panel
+  // and a generic action panel during the Stripe animation.
+  const showFinancePaymentPanel = isFinance && (
+    r.status === RefundStatus.APPROVED_FOR_PAYMENT
+    || r.status === RefundStatus.PAYMENT_PROCESSING
+    || r.status === RefundStatus.PAID
+    || r.status === RefundStatus.ERROR_PROCESSING_PAYMENT
+  );
 
   let availableActions = [];
-  if (!isClientView) {
-    const allActionConfigs = [
-      ...agentActionConfigurations,
-      ...leadActionConfigurations,
-      ...supervisorActionConfigurations,
-      ...financeActionConfigurations,
-      ...(isAdminView ? adminActionConfigurations : [])
-    ];
-    availableActions = allActionConfigs.filter(config => {
-      let roleMatch = false;
-      if (config.requiredRole === 'agent' && isAgentView) roleMatch = true;
-      else if ((config.requiredRole === 'lead' || config.requiredRole === 'team_lead') && isLeadView) roleMatch = true;
-      else if (config.requiredRole === 'supervisor' && isSupervisorView) roleMatch = true;
-      else if (config.requiredRole === 'finance' && isFinanceView) roleMatch = true;
-      else if (config.requiredRole === 'admin' && isAdminView) roleMatch = true;
-      if (!roleMatch) return false;
-      return config.applicableStatuses.includes(requestData.status);
-    }).map(config => {
-      if (config.key === 'leadApprove') { 
-        return {
-          ...config,
-          buttonText: 'Approve (to Finance)',
-        };
-      }
-      return config;
-    });
+  if (isInternal && !isTerminal) {
+    const allConfigs = [...agentActionConfigurations, ...leadActionConfigurations, ...supervisorActionConfigurations, ...financeActionConfigurations, ...(isAdmin ? adminActionConfigurations : [])];
+    availableActions = allConfigs.filter(cfg => {
+      const roleMatch = (cfg.requiredRole === 'agent' && isAgent) || ((cfg.requiredRole === 'lead' || cfg.requiredRole === 'team_lead') && isLead) || (cfg.requiredRole === 'supervisor' && isSupervisor) || (cfg.requiredRole === 'finance' && isFinance) || (cfg.requiredRole === 'admin' && isAdmin);
+      // When the dedicated Stripe panel is shown, hide the generic financeTriggerPayment button
+      if (showFinancePaymentPanel && cfg.key === 'financeTriggerPayment') return false;
+      return roleMatch && cfg.applicableStatuses.includes(r.status);
+    }).map(cfg => cfg.key === 'leadApprove' ? { ...cfg, buttonText: 'Approuver → Finance' } : cfg);
   }
-  
-  const terminalStatuses = [
-    RefundStatus.PAID,
-    RefundStatus.REJECTED_BY_AGENT,
-    RefundStatus.REJECTED_BY_LEAD,
-    RefundStatus.REJECTED_BY_SUPERVISOR,
-    RefundStatus.CANCELLED_BY_CLIENT,
-    RefundStatus.CANCELLED_BY_AGENT
-  ];
-  const showActionsPanel = (isAgentView || isLeadView || isSupervisorView || isFinanceView || isAdminView) &&
-    requestData.status &&
-    !terminalStatuses.includes(requestData.status);
 
-  const auditLogToDisplay = (requestData.auditLogs || []).map(log => ({
+  const auditLog = (r.auditLogs || []).map(log => ({
     createdAt: log.timestamp,
-    changedBy: log.actorName || 'System',
+    changedBy: log.actorName,
     newStatus: log.newStatus,
     oldStatus: log.previousStatus,
     notes: log.fieldChanges,
-    actionDescription: log.actionDescription
+    actionDescription: log.actionDescription,
   })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-  const displayData = {
-    "Request ID (Internal)": requestData.ticketId || requestData.id,
-    "Zendesk Ticket ID": requestData.zendeskTicketId, 
-    "Client Name": `${requestData.clientFirstName} ${requestData.clientLastName}`,
-    "Client Email": requestData.clientEmail,
-    "Client Address": requestData.clientAddress,
-    "Amount": `${requestData.currency} ${requestData.amount.toFixed(2)}`,
-    "Original Order Amount": requestData.originalOrderAmount ? `${requestData.currency} ${requestData.originalOrderAmount.toFixed(2)}` : 'N/A',
-    "Reason": requestData.reason,
-    "Payment Method": requestData.paymentMethod,
-    "Payment Provider Tx ID": requestData.paymentProviderTransactionId,
-    "IBAN": requestData.iban,
-    "BIC/SWIFT": requestData.bic,
-    "Bank Name": requestData.bankName, 
-    "Bank Address": requestData.bankAddress, 
-    "Created At": new Date(requestData.createdAt).toLocaleString(),
-    "Last Updated": new Date(requestData.updatedAt).toLocaleString(),
-    "Created By Role": requestData.createdByRole,
-    "Flagged": requestData.isFlagged ? 'Yes' : 'No',
-    "Risk Triggers": requestData.riskTriggers,
-    "Paid At": requestData.paidAt ? new Date(requestData.paidAt).toLocaleString() : 'N/A',
-  };
+  const roleDashboard = { agent: '/agent', lead: '/lead', team_lead: '/lead', supervisor: '/supervisor', finance: '/finance', client: '/client' };
+  const roleLabel = { agent: 'Agent', lead: 'Responsable', team_lead: 'Responsable', supervisor: 'Superviseur', finance: 'Finance', client: 'Client' };
+
+  const hasNotes = r.agentNotes || r.leadComments || r.supervisorNotes || r.financeNotes || r.rejectionReason;
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
-      <div className="mb-4">
-        <BackButton 
-          buttonText={`Back to ${simulatedRole.charAt(0).toUpperCase() + simulatedRole.slice(1)} Dashboard`}
-        />
-      </div>
-      <header className="mb-8">
-        <div className="flex justify-between items-center mb-2">
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
-            Refund Request: <span className="text-slate-600">{requestData.ticketId || requestData.id}</span>
-          </h1>
-          <Badge variant={getStatusVariant(requestData.status)} className="text-base px-3 py-1">
-            {requestData.status ? requestData.status.replace(/_/g, ' ') : 'N/A'}
-          </Badge>
-        </div>
-        <p className="text-sm text-slate-500">Simulated Role: <span className="font-medium text-slate-700">{actorName}</span></p>
-         {!isClientView && requestData.isFlagged && (
-            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-300 rounded-md flex items-center text-yellow-700 text-sm">
-                <AlertTriangle size={18} className="mr-2 text-yellow-600" />
-                <strong>Flagged Request:</strong> {requestData.riskTriggers || 'Review required due to internal flagging rules.'}
-            </div>
-        )}
-      </header>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
-          {/* Client-specific forms Logic Updated */}
-          {isClientView && requestData.status === RefundStatus.AWAITING_CLIENT_VALIDATION && (
-            // Use the new imported Client Component
-            <ClientValidationAndEditForm refundRequest={requestData} actorName={actorName} />
+    <div className="min-h-screen" style={{ background: 'hsl(220,20%,97%)' }}>
+      {/* Top bar */}
+      <div className="bg-white border-b px-6 py-3 flex items-center gap-4" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+        <BackButton buttonText={`← ${roleLabel[simulatedRole] || 'Retour'}`} />
+        <div className="h-4 w-px bg-gray-200" />
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-sm font-semibold text-gray-900 truncate">
+            {r.ticketId || r.id}
+          </span>
+          {r.zendeskTicketId && (
+            <span className="text-xs text-gray-400">· ZD-{r.zendeskTicketId}</span>
           )}
-          {isClientView && requestData.status === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO && (
+        </div>
+        <Badge variant={getStatusVariant(r.status)} className="shrink-0">
+          {getStatusLabel(r.status)}
+        </Badge>
+        {isAgent && r.zendeskTicketId && (
+          <Link
+            href={`/zendesk/${r.zendeskTicketId}`}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#1f73b7] text-white rounded-md text-xs font-medium hover:bg-[#1a65a3] transition-colors shrink-0"
+            target="_blank"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8zm0 14c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6z"/></svg>
+            Zendesk
+          </Link>
+        )}
+        {r.isFlagged && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full shrink-0">
+            <AlertTriangle className="w-3 h-3 text-amber-500" />
+            <span className="text-xs font-medium text-amber-700">Signalée</span>
+          </div>
+        )}
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* ── Left column ── */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {/* Flag banner */}
+          {r.isFlagged && (
+            <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+              <div>
+                <p className="font-semibold mb-0.5">Demande signalée</p>
+                <p className="text-amber-700 text-xs">{r.riskTriggers || 'Vérification requise.'}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Client forms */}
+          {isClient && r.status === RefundStatus.AWAITING_CLIENT_VALIDATION && (
+            <ClientValidationAndEditForm refundRequest={r} actorName={actorName} />
+          )}
+          {isClient && r.status === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO && (
             <>
-              <InfoCard title="Update Your Details (IBAN/BIC/Address)"> 
-                <ClientEditDetailsForm requestData={requestData} actorName={actorName} asStandaloneForm={true} />
-              </InfoCard>
-              <ClientSubmitInfoForm refundRequest={requestData} actorName={actorName} />
+              <ClientEditDetailsForm requestData={r} actorName={actorName} asStandaloneForm />
+              <ClientSubmitInfoForm refundRequest={r} actorName={actorName} />
             </>
           )}
-          {isClientView && (requestData.status === RefundStatus.DRAFT) && ( 
-             <InfoCard title="Edit Your Draft Details (IBAN/BIC/Address)">
-               <ClientEditDetailsForm requestData={requestData} actorName={actorName} asStandaloneForm={true} />
-             </InfoCard>
+          {/* Proactive IBAN form — show whenever client views a pending request with no IBAN */}
+          {isClient && !r.iban && [
+            RefundStatus.PENDING_AGENT_REVIEW,
+            RefundStatus.RETURNED_TO_AGENT_FOR_EDITS,
+            RefundStatus.PENDING_LEAD_APPROVAL,
+            RefundStatus.PENDING_FINAL_APPROVAL,
+          ].includes(r.status) && (
+            <ClientProvideIbanForm requestId={r.id} />
           )}
 
-          <InfoCard title="Refund Request Details">
-            <InfoItem label="Request ID" value={requestData.ticketId || requestData.id} />
-            <InfoItem label="Client First Name" value={requestData.clientFirstName}>
-              {isClientFirstNameMismatch && (
-                <Tooltip text="First name differs from original payment">
-                  <AlertTriangle size={16} className="ml-2 text-orange-500" />
-                </Tooltip>
-              )}
-            </InfoItem>
-            <InfoItem label="Client Last Name" value={requestData.clientLastName}>
-              {isClientLastNameMismatch && (
-                <Tooltip text="Last name differs from original payment">
-                  <AlertTriangle size={16} className="ml-2 text-orange-500" />
-                </Tooltip>
-              )}
-            </InfoItem>
-            <InfoItem label="Client Email" value={requestData.clientEmail} />
-            {requestData.clientAddress && (
-              <InfoItem label="Client Address (for refund)" value={requestData.clientAddress}>
-                {isClientAddressMismatch && (
-                  <Tooltip text="Address differs from original billing address">
-                    <InfoIcon size={16} className="ml-2 text-blue-500" />
-                  </Tooltip>
-                )}
-              </InfoItem>
-            )}
-            <InfoItem 
-              label="Amount" 
-              value={<span className="font-bold text-md">{`${requestData.currencySymbol}${requestData.amount?.toFixed(2)} ${requestData.currency}`}</span>}
-            >
-              {requestData.originalOrderAmount != null && requestData.amount > requestData.originalOrderAmount && (
-                <Tooltip text={`Amount requested (${requestData.currencySymbol}${requestData.amount}) is MORE than original payment (${requestData.currencySymbol}${requestData.originalOrderAmount}).`}>
-                  <AlertTriangle size={16} className="ml-2 text-yellow-500" />
-                </Tooltip>
-              )}
-              {requestData.originalOrderAmount != null && requestData.amount < requestData.originalOrderAmount && (
-                <Tooltip text={`Amount requested (${requestData.currencySymbol}${requestData.amount}) is LESS than original payment (${requestData.currencySymbol}${requestData.originalOrderAmount}).`}>
-                  <InfoIcon size={16} className="ml-2 text-green-500" />
-                </Tooltip>
-              )}
-              {requestData.originalOrderAmount != null && requestData.amount === requestData.originalOrderAmount && (
-                <Tooltip text={`Amount requested (${requestData.currencySymbol}${requestData.amount}) is EQUAL to original payment (${requestData.currencySymbol}${requestData.originalOrderAmount}).`}>
-                  <InfoIcon size={16} className="ml-2 text-slate-500" />
-                </Tooltip>
-              )}
-            </InfoItem>
-            <InfoItem label="Reason for Refund" value={requestData.reason} />
-            <InfoItem label="Status" value={requestData.status} isBadge={true} badgeVariant={getStatusVariant(requestData.status)} />
-            <InfoItem label="Created At" value={new Date(requestData.createdAt).toLocaleString()} />
-            <InfoItem label="Last Updated" value={new Date(requestData.updatedAt).toLocaleString()} />
-            {requestData.paidAt && <InfoItem label="Paid At" value={new Date(requestData.paidAt).toLocaleString()} />} 
-            <InfoItem label="Requested By Role" value={requestData.createdByRole} />
-            {requestData.zendeskTicketId && (
-              <InfoItem label="Zendesk Ticket ID">
-                <Link
-                  href={`https://somecompany.zendesk.com/agent/tickets/${requestData.zendeskTicketId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                  >
-                  {requestData.zendeskTicketId}
-                </Link>
-              </InfoItem>
-            )}
-          </InfoCard>
+          {/* Client info */}
+          <Section icon={User} title="Client">
+            <Row label="Nom complet">
+              <span className="font-medium">{r.clientFirstName} {r.clientLastName}</span>
+              {nameMismatch && <Tooltip text="Nom différent du paiement d'origine"><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /></Tooltip>}
+            </Row>
+            <Row label="Email">{r.clientEmail || <Empty />}</Row>
+            <Row label="Adresse" info={addressMismatch ? "Adresse différente de la facturation d'origine" : undefined}>
+              {r.clientAddress || <Empty />}
+            </Row>
+          </Section>
 
-          {!isClientView && (
-            <InfoCard title="Original Payment Details">
-              <InfoItem label="Order ID" value={requestData.orderId} />
-              <InfoItem label="Original Item/Service" value={requestData.originalItemPaidFor} />
-              <InfoItem label="Payment Method">
-                <span className="ml-2">{requestData.paymentMethod ? requestData.paymentMethod.replace(/_/g, ' ') : 'N/A'}</span>
-              </InfoItem>
-              <InfoItem label="Card Used (Partial)" value={requestData.originalCardUsed} />
-              <InfoItem label="Payment Date" value={requestData.originalPaymentDate ? new Date(requestData.originalPaymentDate).toLocaleDateString() : 'N/A'} />
-              <InfoItem 
-                label="Original Amount" 
-                value={<span className="font-bold text-md">{`${requestData.currencySymbol}${requestData.originalOrderAmount?.toFixed(2)} ${requestData.currency}`}</span>} 
+          {/* Request */}
+          <Section icon={FileText} title="Demande de remboursement">
+            <Row label="Motif">
+              <span className="text-gray-700">{r.reason || <Empty />}</span>
+            </Row>
+            <Row label="Montant demandé">
+              <span className="text-lg font-bold text-gray-900">{sym}{r.amount?.toFixed(2)} {r.currency}</span>
+              {amountOver && <Tooltip text={`Supérieur au paiement d'origine (${sym}${r.originalOrderAmount?.toFixed(2)})`}><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /></Tooltip>}
+              {amountUnder && <Tooltip text={`Inférieur au paiement d'origine (${sym}${r.originalOrderAmount?.toFixed(2)})`}><Info className="w-3.5 h-3.5 text-blue-400" /></Tooltip>}
+            </Row>
+            <Row label="Créée le">{new Date(r.createdAt).toLocaleString('fr-FR')}</Row>
+            <Row label="Mise à jour">{new Date(r.updatedAt).toLocaleString('fr-FR')}</Row>
+            {r.paidAt && <Row label="Remboursée le"><span className="text-emerald-600 font-medium">{new Date(r.paidAt).toLocaleString('fr-FR')}</span></Row>}
+          </Section>
+
+          {/* Original payment — internal only */}
+          {isInternal && (
+            <Section icon={CreditCard} title="Paiement d'origine">
+              <Row label="Article">{r.originalItemPaidFor || <Empty />}</Row>
+              <Row label="Montant initial">
+                {r.originalOrderAmount != null
+                  ? <span className="font-medium">{sym}{r.originalOrderAmount.toFixed(2)} {r.currency}</span>
+                  : <Empty />}
+              </Row>
+              <Row label="Date">{r.originalPaymentDate ? new Date(r.originalPaymentDate).toLocaleDateString('fr-FR') : <Empty />}</Row>
+              <Row label="Mode">{r.paymentMethod ? r.paymentMethod.replace(/_/g, ' ') : <Empty />}</Row>
+              <Row label="Carte">{r.originalCardUsed || <Empty />}</Row>
+              <Row label="ID transaction">{r.paymentProviderTransactionId || <Empty />}</Row>
+              <Row label="N° commande">{r.orderId || <Empty />}</Row>
+              <Row label="Nom facturé">
+                <span>{r.originalClientFirstName} {r.originalClientLastName}</span>
+                {nameMismatch && <Tooltip text="Différent du bénéficiaire"><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /></Tooltip>}
+              </Row>
+            </Section>
+          )}
+
+          {/* Bank details */}
+          {(r.iban || r.bic || r.bankName) ? (
+            <Section icon={Building2} title="Coordonnées bancaires">
+              {r.iban && <Row label="IBAN"><span className="font-mono text-xs tracking-wide">{r.iban}</span></Row>}
+              {r.bic && <Row label="BIC / SWIFT"><span className="font-mono text-xs">{r.bic}</span></Row>}
+              {r.bankName && <Row label="Banque">{r.bankName}</Row>}
+              {r.bankAddress && <Row label="Adresse banque">{r.bankAddress}</Row>}
+            </Section>
+          ) : isInternal ? (
+            <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-dashed text-sm text-gray-400" style={{ borderColor: 'hsl(220,13%,84%)' }}>
+              <Building2 className="w-4 h-4 shrink-0" />
+              <span>Coordonnées bancaires non renseignées — le client les fournira lors de la validation.</span>
+            </div>
+          ) : null}
+
+          {/* Notes — internal only */}
+          {isInternal && hasNotes && (
+            <Section icon={FileText} title="Notes & communications">
+              {r.agentNotes && (
+                <div className="pb-3 border-b last:border-0 last:pb-0" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+                  <p className="text-xs font-medium text-gray-400 mb-1">Agent</p>
+                  <p className="text-sm text-gray-700">{r.agentNotes}</p>
+                </div>
+              )}
+              {r.leadComments && (
+                <div className="pb-3 border-b last:border-0 last:pb-0" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+                  <p className="text-xs font-medium text-gray-400 mb-1">Responsable</p>
+                  <p className="text-sm text-gray-700">{r.leadComments}</p>
+                </div>
+              )}
+              {r.supervisorNotes && (
+                <div className="pb-3 border-b last:border-0 last:pb-0" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+                  <p className="text-xs font-medium text-gray-400 mb-1">Superviseur</p>
+                  <p className="text-sm text-gray-700">{r.supervisorNotes}</p>
+                </div>
+              )}
+              {r.financeNotes && (
+                <div className="pb-3 border-b last:border-0 last:pb-0" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+                  <p className="text-xs font-medium text-gray-400 mb-1">Finance</p>
+                  <p className="text-sm text-gray-700">{r.financeNotes}</p>
+                </div>
+              )}
+              {r.rejectionReason && (
+                <div className="pb-0">
+                  <p className="text-xs font-medium text-red-400 mb-1">Motif du rejet</p>
+                  <p className="text-sm text-red-700">{r.rejectionReason}</p>
+                </div>
+              )}
+            </Section>
+          )}
+
+          {/* Internal notes form */}
+          {isInternal && (
+            <Section icon={Lock} title="Notes internes (confidentielles)">
+              <UpdateInternalNotesForm
+                requestId={r.id}
+                currentNotes={r.internalNotes}
               />
-              <InfoItem label="First Name" value={requestData.originalClientFirstName}>
-                {isClientFirstNameMismatch && (
-                  <Tooltip text="First name differs from refund request name">
-                    <AlertTriangle size={16} className="ml-2 text-orange-500" />
-                  </Tooltip>
-                )}
-              </InfoItem>
-              <InfoItem label="Last Name" value={requestData.originalClientLastName}>
-                {isClientLastNameMismatch && (
-                  <Tooltip text="Last name differs from refund request name">
-                    <AlertTriangle size={16} className="ml-2 text-orange-500" />
-                  </Tooltip>
-                )}
-              </InfoItem>
-              <InfoItem label="Billing Address" value={requestData.originalClientAddress}>
-                {isClientAddressMismatch && (
-                  <Tooltip text="Address differs from refund recipient address">
-                    <InfoIcon size={16} className="ml-2 text-blue-500" />
-                  </Tooltip>
-                )}
-              </InfoItem>
-              {requestData.paymentProviderTransactionId && <InfoItem label="Payment Provider Txn ID" value={requestData.paymentProviderTransactionId} />}
-            </InfoCard>
-          )}
-
-          {(requestData.iban || requestData.bic || requestData.bankName) && (
-            <InfoCard title="Bank Details for Refund">
-              {requestData.iban && <InfoItem label="IBAN" value={requestData.iban} />}
-              {requestData.bic && <InfoItem label="BIC/SWIFT" value={requestData.bic} />}
-              {requestData.bankName && <InfoItem label="Bank Name" value={requestData.bankName} />}
-              {requestData.bankAddress && <InfoItem label="Bank Address" value={requestData.bankAddress} />}
-            </InfoCard>
-          )}
-          
-          {hasAnyNotes && (
-            <InfoCard title="Notes & Communications Log">
-              {hasAgentNotes && (
-                <NoteDisplayItem title="Agent Notes" notes={requestData.agentNotes} />
-              )}
-              {hasClientValidationDetails && (
-                <NoteDisplayItem title="Client Validation/Info" notes={requestData.clientValidationDetails} />
-              )}
-              {hasLeadComments && (
-                <NoteDisplayItem title="Lead Comments" notes={requestData.leadComments} />
-              )}
-              {hasSupervisorNotes && (
-                <NoteDisplayItem title="Supervisor Notes" notes={requestData.supervisorNotes} />
-              )}
-              {hasFinanceNotes && (
-                <NoteDisplayItem title="Finance Notes" notes={requestData.financeNotes} />
-              )}
-              {hasRejectionReason && (
-                <NoteDisplayItem title="Rejection Reason" notes={requestData.rejectionReason} />
-              )}
-            </InfoCard>
-          )}
-
-          {!isClientView && (
-            <InfoCard title="Internal System Notes (Confidential)">
-                <InfoItem label="Current Internal Notes" value={requestData.internalNotes || '(No internal notes yet)'} />
-                <UpdateInternalNotesForm 
-                    refundRequestId={requestData.id} 
-                    currentNotes={requestData.internalNotes} 
-                    actorName={actorName} 
-                />
-            </InfoCard>
+            </Section>
           )}
         </div>
 
-        <aside className="md:col-span-1 space-y-6">
-          {!isClientView ? (
-            availableActions.length > 0 ? (
-              <ActionsPanel
-                availableActions={availableActions}
-                refundRequest={requestData}
-                actorName={actorName}
-                currentNotes={{
-                  agentNotes: requestData.agentNotes,
-                  leadComments: requestData.leadComments,
-                  supervisorNotes: requestData.supervisorNotes,
-                  financeNotes: requestData.financeNotes,
-                  rejectionReason: requestData.rejectionReason,
-                  adminNotes: requestData.internalNotes
-                }}
-              />
-            ) : (
-              <InfoCard title="Actions">
-                <p className="text-sm text-slate-500">No actions available for this request in its current state or for your role.</p>
-              </InfoCard>
-            )
-          ) : null}
-          
-          {!isClientView && (
-            <InfoCard title="Request Journey" titleBadge={auditLogToDisplay.length > 0 ? <Badge variant="outline">{auditLogToDisplay.length} entries</Badge> : null}>
-              {auditLogToDisplay.length > 0 ? (
-                <ol className="relative border-s border-gray-200">
-                  {auditLogToDisplay.map((entry, index) => (
-                    <JourneyItem key={entry.id || index} entry={entry} isLast={index === auditLogToDisplay.length -1} />
-                  ))}
-                </ol>
-              ) : (
-                <p className="text-sm text-slate-500">No history recorded for this request yet.</p>
+        {/* ── Right column ── */}
+        <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+
+          {/* IBAN / validation checklist — agent only */}
+          {isAgent && (
+            <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+              <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+                <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Checklist de traitement</span>
+              </div>
+              <div className="px-5 py-3 divide-y" style={{ borderColor: 'hsl(220,13%,91%)' }}>
+                <CheckItem
+                  ok={!!r.iban && !!r.bic}
+                  warn={!r.iban}
+                  label={r.iban ? `IBAN fourni` : 'IBAN manquant'}
+                  detail={r.iban
+                    ? `${r.iban.slice(0, 4)} •••• ${r.iban.slice(-4)}${r.bic ? ` · ${r.bic}` : ''}`
+                    : 'À demander au client avant traitement'}
+                />
+                <CheckItem
+                  ok={!nameMismatch}
+                  warn={nameMismatch}
+                  label={nameMismatch ? 'Nom bénéficiaire différent' : 'Identité cohérente'}
+                  detail={nameMismatch
+                    ? `Demandeur : ${r.clientFirstName} ${r.clientLastName} — Paiement original : ${r.originalClientFirstName} ${r.originalClientLastName}`
+                    : `${r.clientFirstName} ${r.clientLastName}`}
+                />
+                <CheckItem
+                  ok={!amountOver}
+                  warn={amountOver}
+                  label={amountOver ? 'Montant supérieur à la commande' : 'Montant cohérent'}
+                  detail={r.originalOrderAmount != null
+                    ? `Demandé : ${sym}${r.amount?.toFixed(2)} — Original : ${sym}${r.originalOrderAmount?.toFixed(2)}`
+                    : undefined}
+                />
+                <CheckItem
+                  ok={!r.isFlagged}
+                  warn={r.isFlagged}
+                  label={r.isFlagged ? 'Demande signalée' : 'Aucune anomalie détectée'}
+                  detail={r.isFlagged ? r.riskTriggers : undefined}
+                />
+              </div>
+              {/* Relance button if IBAN missing */}
+              {!r.iban && (r.status === RefundStatus.PENDING_AGENT_REVIEW || r.status === RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) && (
+                <div className="px-5 pb-4">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-3">
+                    <p className="text-xs text-amber-700 font-medium">
+                      Le client n'a pas encore fourni son IBAN. Utilisez "Demander info au client" pour envoyer une relance.
+                    </p>
+                  </div>
+                </div>
               )}
-            </InfoCard>
+            </div>
           )}
-        </aside>
+
+          {/* Stripe-styled inline payment panel — finance + payment lifecycle */}
+          {showFinancePaymentPanel && (
+            <FinancePaymentPanel
+              refundRequest={r}
+              actorName={actorName}
+              currentStatus={r.status}
+            />
+          )}
+
+          {/* Actions */}
+          {isInternal && (
+            <ActionsPanel
+              availableActions={availableActions}
+              refundRequest={r}
+              actorName={actorName}
+            />
+          )}
+
+          {/* Timeline */}
+          {isInternal && (
+            <Section icon={Clock} title={`Historique · ${auditLog.length} entrée${auditLog.length > 1 ? 's' : ''}`}>
+              {auditLog.length > 0 ? (
+                <ul className="px-5 py-4">
+                  {auditLog.map((entry, i) => (
+                    <TimelineEntry key={i} entry={entry} isLast={i === auditLog.length - 1} />
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-5 py-4 text-sm text-gray-400">Aucun historique.</p>
+              )}
+            </Section>
+          )}
+        </div>
       </div>
     </div>
   );
-} 
+}

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { RefundStatus } from '@prisma/client';
 import PaginationControls from '@/components/PaginationControls';
 import { useRouter } from 'next/navigation';
@@ -13,19 +12,23 @@ import { supervisorBulkApprove } from '@/actions/supervisorActions';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft } from 'lucide-react';
+import { getStatusLabel } from '@/lib/utils';
 
 const ITEMS_PER_PAGE = 10;
 
 function BulkApproveButton() {
   const { pending } = useFormStatus();
-  return <Button type="submit" variant="default" disabled={pending}>{pending ? 'Processing...' : 'Approve Selected'}</Button>;
+  return (
+    <Button type="submit" size="sm" disabled={pending}>
+      {pending ? 'Traitement...' : 'Approuver la sélection'}
+    </Button>
+  );
 }
 
 export default function SupervisorDashboard({ searchParams: searchParamsProp }) {
   const router = useRouter();
   const searchParams = use(searchParamsProp);
-  
+
   const [refundRequests, setRefundRequests] = useState([]);
   const [totalRequests, setTotalRequests] = useState(0);
   const [error, setError] = useState(null);
@@ -35,23 +38,19 @@ export default function SupervisorDashboard({ searchParams: searchParamsProp }) 
   const [selectAll, setSelectAll] = useState(false);
 
   const initialBulkActionState = { message: null, error: null, successCount: 0, failureCount: 0 };
-  const [bulkActionState, bulkActionDispatch, isBulkActionPending] = useActionState(supervisorBulkApprove, initialBulkActionState);
+  const [bulkActionState, bulkActionDispatch] = useActionState(supervisorBulkApprove, initialBulkActionState);
 
   useEffect(() => {
     async function fetchData() {
       setError(null);
       try {
         const response = await fetch(`/api/refunds?role=supervisor&page=${currentPage}&limit=${ITEMS_PER_PAGE}`);
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ detail: 'Failed to parse error response' }));
-          throw new Error(`HTTP error! status: ${response.status}, details: ${errorData.detail || response.statusText}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         setRefundRequests(data.requests || []);
         setTotalRequests(data.totalCount || 0);
       } catch (err) {
-        console.error('Data fetching error (SupervisorDashboard):', err);
-        setError(err.message || 'Failed to load refund requests. Please try again later.');
+        setError(err.message || 'Impossible de charger les demandes.');
       }
     }
     fetchData();
@@ -60,27 +59,27 @@ export default function SupervisorDashboard({ searchParams: searchParamsProp }) 
   useEffect(() => {
     if (bulkActionState?.message) {
       if (bulkActionState.successCount > 0 && bulkActionState.failureCount === 0) {
-        toast.success("Bulk Approve Successful", { description: bulkActionState.message });
+        toast.success('Approbation groupée réussie', { description: bulkActionState.message });
       } else if (bulkActionState.successCount > 0 && bulkActionState.failureCount > 0) {
-        toast.warning("Bulk Approve Partially Successful", { description: bulkActionState.message });
-      } else if (bulkActionState.failureCount > 0 && bulkActionState.successCount === 0){
-        toast.error("Bulk Approve Failed", { description: bulkActionState.message });
+        toast.warning('Approbation partiellement réussie', { description: bulkActionState.message });
+      } else if (bulkActionState.failureCount > 0) {
+        toast.error("Échec de l'approbation", { description: bulkActionState.message });
       } else if (bulkActionState.error) {
-        toast.error("Bulk Approve Error", { description: bulkActionState.error });
-      } else { 
-         toast.info("Bulk Approve Update", { description: bulkActionState.message });
+        toast.error('Erreur', { description: bulkActionState.error });
+      } else {
+        toast.info('Mise à jour', { description: bulkActionState.message });
       }
-      setSelectedRequests([]); 
+      setSelectedRequests([]);
       setSelectAll(false);
-      async function refetchData() {
+      async function refetch() {
         try {
-            const response = await fetch(`/api/refunds?role=supervisor&page=${currentPage}&limit=${ITEMS_PER_PAGE}`);
-            const data = await response.json();
-            setRefundRequests(data.requests || []);
-            setTotalRequests(data.totalCount || 0);
-        } catch (e) { console.error("Refetch failed", e); setError("Failed to refresh data.")}
+          const r = await fetch(`/api/refunds?role=supervisor&page=${currentPage}&limit=${ITEMS_PER_PAGE}`);
+          const d = await r.json();
+          setRefundRequests(d.requests || []);
+          setTotalRequests(d.totalCount || 0);
+        } catch { setError('Impossible de rafraîchir les données.'); }
       }
-      refetchData();
+      refetch();
     }
   }, [bulkActionState, currentPage]);
 
@@ -94,128 +93,95 @@ export default function SupervisorDashboard({ searchParams: searchParamsProp }) 
   };
 
   const handleSelectRequest = (id, checked) => {
-    if (checked) {
-      setSelectedRequests(prev => [...prev, id]);
-    } else {
-      setSelectedRequests(prev => prev.filter(reqId => reqId !== id));
-      setSelectAll(false);
-    }
+    if (checked) setSelectedRequests(prev => [...prev, id]);
+    else { setSelectedRequests(prev => prev.filter(i => i !== id)); setSelectAll(false); }
   };
-  
+
   useEffect(() => {
-    const eligibleRequests = refundRequests.filter(r => r.status === RefundStatus.PENDING_FINAL_APPROVAL);
-    if (eligibleRequests.length > 0 && selectedRequests.length === eligibleRequests.length) {
-      setSelectAll(true);
-    } else {
-      setSelectAll(false);
-    }
+    const eligible = refundRequests.filter(r => r.status === RefundStatus.PENDING_FINAL_APPROVAL);
+    setSelectAll(eligible.length > 0 && selectedRequests.length === eligible.length);
   }, [selectedRequests, refundRequests]);
 
-  const handleRowClick = (requestId) => {
-    router.push(`/refunds/${requestId}?simulatedRole=supervisor`);
-  };
+  const handleRowClick = (id) => router.push(`/refunds/${id}?simulatedRole=supervisor`);
 
-  if (error && !refundRequests.length) {
-    return <p className="p-4 text-red-500">Error: {error}</p>;
-  }
+  if (error) return <p className="p-6 text-red-500">{error}</p>;
 
-  const actorName = "Simulated Supervisor";
+  const actorName = 'Superviseur (simulation)';
 
   return (
-    <div className="p-4 md:p-6 lg:p-8">
-      <h1 className="text-2xl md:text-3xl font-bold text-slate-800 mb-6">Supervisor Dashboard</h1>
-      
+    <div className="p-6 lg:p-8">
       <div className="mb-6">
-        <Button variant="outline" onClick={() => router.push('/overview')} className="text-slate-700 border-slate-300 hover:bg-slate-50">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Overview
-        </Button>
+        <h1 className="text-2xl font-bold text-gray-900">Approbations finales</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Demandes en attente de votre approbation</p>
       </div>
 
-      <h2 className="text-xl font-semibold text-slate-700 mb-4">
-        Requests for Final Approval
-      </h2>
-      {error && <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded-md">Error loading data: {error}</div>}
       <form action={bulkActionDispatch}>
         <input type="hidden" name="selectedIds" value={selectedRequests.join(',')} />
         <input type="hidden" name="actorName" value={actorName} />
 
         {selectedRequests.length > 0 && (
-          <div className="my-4 p-4 bg-slate-100 rounded-md flex items-center justify-between gap-4 border border-slate-200 shadow">
-            <p className="text-sm font-medium text-slate-700">{selectedRequests.length} request(s) selected for final approval.</p>
-            <div className='flex items-center gap-2'>
-                <Textarea name="supervisorNotes" placeholder="Optional: Add a common note for approved items." rows={2} className="max-w-md bg-white text-sm p-2"/>
-                <BulkApproveButton />
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-between gap-4">
+            <p className="text-sm font-medium text-blue-800">{selectedRequests.length} demande(s) sélectionnée(s)</p>
+            <div className="flex items-center gap-2">
+              <Textarea
+                name="supervisorNotes"
+                placeholder="Note commune (optionnel)"
+                rows={1}
+                className="max-w-xs bg-white text-sm"
+              />
+              <BulkApproveButton />
             </div>
           </div>
         )}
-        <div className="bg-white shadow-lg rounded-lg overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
-              <tr>
-                <th scope="col" className="p-3 text-left">
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <Checkbox 
-                      id="select-all-supervisor"
+
+        <div className="bg-white rounded-lg border overflow-x-auto" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+                <th className="px-4 py-3 text-left w-10">
+                  <div onClick={e => e.stopPropagation()}>
+                    <Checkbox
                       checked={selectAll}
                       onCheckedChange={handleSelectAll}
-                      aria-label="Select all eligible requests for final approval"
                       disabled={refundRequests.filter(r => r.status === RefundStatus.PENDING_FINAL_APPROVAL).length === 0}
                     />
                   </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Request ID</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Customer</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Amount</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Last Updated</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Client</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Montant</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Statut</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Mise à jour</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-slate-200">
-              {refundRequests.map((request) => {
-                const isEligibleForBulkApprove = request.status === RefundStatus.PENDING_FINAL_APPROVAL;
+            <tbody>
+              {refundRequests.map(request => {
+                const eligible = request.status === RefundStatus.PENDING_FINAL_APPROVAL;
+                const selected = selectedRequests.includes(request.id);
                 return (
-                  <tr 
-                    key={request.id} 
-                    className={`hover:bg-slate-50 transition-colors duration-150 ${isEligibleForBulkApprove ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'} ${selectedRequests.includes(request.id) ? 'bg-slate-100' : ''}`}
-                    onClick={() => isEligibleForBulkApprove && handleRowClick(request.id)}
+                  <tr
+                    key={request.id}
+                    onClick={() => eligible && handleRowClick(request.id)}
+                    className={`border-b transition-colors ${eligible ? 'cursor-pointer hover:bg-gray-50' : 'opacity-60 cursor-not-allowed'} ${selected ? 'bg-blue-50' : ''}`}
+                    style={{ borderColor: 'hsl(220,13%,89%)' }}
                   >
-                    <td className="p-3 whitespace-nowrap">
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Checkbox 
-                          id={`select-supervisor-${request.id}`}
-                          checked={selectedRequests.includes(request.id)}
-                          onCheckedChange={(checked) => handleSelectRequest(request.id, checked)}
-                          disabled={!isEligibleForBulkApprove}
-                          aria-label={`Select request ${request.id} for final approval`}
-                        />
-                      </div>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={checked => handleSelectRequest(request.id, checked)}
+                        disabled={!eligible}
+                      />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-800 hover:underline" onClick={(e) => {e.stopPropagation(); handleRowClick(request.id);}}>
-                      {request.ticketId || request.id}
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{request.ticketId || request.id}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{request.clientFirstName} {request.clientLastName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {request.currency === 'USD' ? '$' : request.currency === 'EUR' ? '€' : request.currency === 'GBP' ? '£' : ''}
+                      {typeof request.amount === 'number' ? request.amount.toFixed(2) : 'N/A'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">{request.clientFirstName} {request.clientLastName}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">
-                      {request.currency === 'USD' ? '$' : request.currency === 'EUR' ? '€' : request.currency === 'GBP' ? '£' : ''}{typeof request.amount === 'number' ? request.amount.toFixed(2) : 'N/A'}
+                    <td className="px-4 py-3">
+                      <Badge variant="outline" className="text-xs">{getStatusLabel(request.status)}</Badge>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge variant={(() => {
-                        const s = request.status;
-                        if (s === RefundStatus.PENDING_AGENT_REVIEW) return 'agent-pending';
-                        if (s === RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) return 'warning';
-                        if (s === RefundStatus.PENDING_LEAD_APPROVAL) return 'lead-pending';
-                        if (s === RefundStatus.PENDING_FINAL_APPROVAL) return 'supervisor-pending';
-                        if (s === RefundStatus.APPROVED_FOR_PAYMENT) return 'approved';
-                        if (s === RefundStatus.PAYMENT_PROCESSING) return 'processing';
-                        if (s === RefundStatus.PAID) return 'success';
-                        if (s === RefundStatus.AWAITING_CLIENT_VALIDATION || s === RefundStatus.RETURNED_TO_CLIENT_FOR_INFO) return 'client-action';
-                        if (s.includes('REJECT') || s.includes('CANCEL')) return 'destructive';
-                        return 'default';
-                      })()} className="text-xs">
-                        {request.status ? request.status.replace(/_/g, ' ') : 'N/A'}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500">{new Date(request.updatedAt).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-gray-400">{new Date(request.updatedAt).toLocaleString()}</td>
                   </tr>
                 );
               })}
@@ -223,12 +189,16 @@ export default function SupervisorDashboard({ searchParams: searchParamsProp }) 
           </table>
         </div>
       </form>
-      {refundRequests.length === 0 && !error && (
-         <p className="text-slate-600 mt-4">No refund requests currently require your final approval.</p>
+
+      {refundRequests.length === 0 && (
+        <div className="text-center py-16 bg-white rounded-lg border mt-0" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+          <p className="text-gray-400 text-sm">Aucune demande en attente d'approbation finale.</p>
+        </div>
       )}
-      {totalRequests > 0 && !error && (
+
+      {totalRequests > 0 && (
         <PaginationControls totalItems={totalRequests} itemsPerPage={ITEMS_PER_PAGE} />
       )}
     </div>
   );
-} 
+}

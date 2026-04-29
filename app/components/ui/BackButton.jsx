@@ -17,13 +17,12 @@ export default function BackButton({ dashboardPath, buttonText = 'Back' }) {
   };
 
   return (
-    <Button
-      variant="outline"
+    <button
       onClick={handleClick}
-      className="text-slate-700 border-slate-300 hover:bg-slate-50"
+      className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors"
     >
-      <ArrowLeft className="mr-2 h-4 w-4" />
+      <ArrowLeft className="h-4 w-4" />
       {buttonText}
-    </Button>
+    </button>
   );
 } 

@@ -2,67 +2,96 @@
 import { useState } from 'react';
 import ActionButton from './ActionButton';
 
+const ACTION_STYLES = {
+  agentApprove:       { bg: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-white', icon: '✓' },
+  agentRequestInfo:   { bg: 'bg-blue-500 hover:bg-blue-600',    text: 'text-white', icon: '?' },
+  agentEscalate:      { bg: 'bg-amber-500 hover:bg-amber-600',  text: 'text-white', icon: '↑' },
+  agentReject:        { bg: 'bg-red-500 hover:bg-red-600',      text: 'text-white', icon: '✕' },
+  leadApprove:        { bg: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-white', icon: '✓' },
+  leadReturnToAgent:  { bg: 'bg-amber-500 hover:bg-amber-600',  text: 'text-white', icon: '↩' },
+  leadReject:         { bg: 'bg-red-500 hover:bg-red-600',      text: 'text-white', icon: '✕' },
+  supervisorApprove:  { bg: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-white', icon: '✓' },
+  supervisorReject:   { bg: 'bg-red-500 hover:bg-red-600',      text: 'text-white', icon: '✕' },
+  financeTriggerPayment: { bg: 'bg-blue-500 hover:bg-blue-600', text: 'text-white', icon: '→' },
+  financeReject:      { bg: 'bg-red-500 hover:bg-red-600',      text: 'text-white', icon: '✕' },
+  financeHandlePaymentError: { bg: 'bg-orange-500 hover:bg-orange-600', text: 'text-white', icon: '!' },
+};
+
 export default function ActionsPanel({
   refundRequest,
   actorName,
-  availableActions = [], // Expects an array of action configurations
+  availableActions = [],
   initialComment = ''
 }) {
   const [comment, setComment] = useState(initialComment || '');
 
   if (availableActions.length === 0) {
-    return <p className="text-gray-600 italic">No actions available.</p>;
+    return (
+      <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+        <div className="px-5 py-3 border-b" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</span>
+        </div>
+        <p className="px-5 py-4 text-sm text-gray-400 italic">Aucune action disponible à ce stade.</p>
+      </div>
+    );
   }
 
-  // Determine if any action requires a comment to enable/disable textarea
   const isCommentRequiredByAnyAction = availableActions.some(action => action.requiresComment);
   const sharedTextareaName = availableActions.find(a => a.commentFieldName)?.commentFieldName || 'actionComment';
 
   return (
-    <div className="bg-white shadow border border-slate-200 rounded-lg p-6 space-y-4">
-      <div>
-        <label htmlFor={`actionComment_${refundRequest.id}`} className="block text-sm font-semibold text-slate-700 mb-1.5">
-          Notes / Reason
-        </label>
-        <textarea
-          id={`actionComment_${refundRequest.id}`}
-          name={sharedTextareaName}
-          rows="4" // Increased rows for better visibility
-          className="w-full p-2.5 border rounded-md shadow-sm sm:text-sm border-slate-300 bg-white text-slate-900 focus:ring-slate-500 focus:border-slate-500 placeholder-slate-400 transition-colors duration-150 focus:bg-slate-50"
-          placeholder={isCommentRequiredByAnyAction ? "Please provide a reason or notes for this action..." : "Add any optional notes here..."}
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
+    <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+      <div className="px-5 py-3 border-b" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</span>
       </div>
-      <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-200 mt-4">
-        {availableActions.map((actionProps) => {
-          // Prepare additionalFormData, ensuring targetStatus is included if present
-          const additionalDataForAction = {
-            ...(actionProps.additionalFormData || {}), // Include any existing additionalFormData
-          };
-          if (actionProps.targetStatus) {
-            additionalDataForAction.targetStatus = actionProps.targetStatus;
-          }
+      <div className="px-5 py-4 space-y-4">
+        <div>
+          <label
+            htmlFor={`actionComment_${refundRequest.id}`}
+            className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5"
+          >
+            Notes / Motif
+            {isCommentRequiredByAnyAction && <span className="text-red-400 ml-1">*</span>}
+          </label>
+          <textarea
+            id={`actionComment_${refundRequest.id}`}
+            name={sharedTextareaName}
+            rows="3"
+            className="w-full px-3 py-2.5 border rounded-lg text-sm bg-white text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-300 transition-all"
+            style={{ borderColor: 'hsl(220,13%,89%)' }}
+            placeholder={isCommentRequiredByAnyAction ? "Motif requis pour certaines actions…" : "Notes optionnelles…"}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+        </div>
 
-          return (
-            <ActionButton
-              key={actionProps.key || actionProps.buttonText} // Ensure a unique key
-              refundRequestId={refundRequest.id}
-              actorName={actorName}
-              comment={comment} // Pass the shared comment
-              commentFieldName={actionProps.commentFieldName || sharedTextareaName} // Pass the specific field name if any
-              serverAction={actionProps.serverAction}
-              buttonText={actionProps.buttonText}
-              processingText={actionProps.processingText}
-              successText={actionProps.successText}
-              variant={actionProps.variant}
-              buttonClassName={actionProps.buttonClassName}
-              requiresComment={actionProps.requiresComment}
-              additionalFormData={additionalDataForAction} // Pass the constructed additional data
-            />
-          );
-        })}
+        {/* Visual action buttons */}
+        <div className="flex flex-col gap-2">
+          {availableActions.map((actionProps) => {
+            const style = ACTION_STYLES[actionProps.key] || { bg: 'bg-gray-700 hover:bg-gray-800', text: 'text-white', icon: '→' };
+            const additionalDataForAction = { ...(actionProps.additionalFormData || {}) };
+            if (actionProps.targetStatus) additionalDataForAction.targetStatus = actionProps.targetStatus;
+
+            return (
+              <ActionButton
+                key={actionProps.key || actionProps.buttonText}
+                refundRequestId={refundRequest.id}
+                actorName={actorName}
+                comment={comment}
+                commentFieldName={actionProps.commentFieldName || sharedTextareaName}
+                serverAction={actionProps.serverAction}
+                buttonText={actionProps.buttonText}
+                processingText={actionProps.processingText}
+                successText={actionProps.successText}
+                requiresComment={actionProps.requiresComment}
+                additionalFormData={additionalDataForAction}
+                buttonClassName={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-lg font-medium text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${style.bg} ${style.text}`}
+                icon={style.icon}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
-} 
+}

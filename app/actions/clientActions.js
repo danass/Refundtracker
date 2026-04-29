@@ -176,6 +176,55 @@ export async function clientValidateRequest(prevState, formData) {
   }
 }
 
+// Client Action: Proactively provide IBAN (no status change)
+export async function clientProvideIban(prevState, formData) {
+  const requestId = formData.get('requestId');
+  const iban = formData.get('iban')?.replace(/\s+/g, '').toUpperCase();
+  const bic = formData.get('bic')?.replace(/\s+/g, '').toUpperCase() || null;
+  const bankName = formData.get('bankName') || null;
+
+  const fieldErrors = {};
+  if (!iban) {
+    fieldErrors.iban = 'L\'IBAN est requis.';
+  } else if (!/^[A-Z]{2}[0-9A-Z]{13,32}$/.test(iban)) {
+    fieldErrors.iban = 'Format IBAN invalide (ex: FR76 3000 …).';
+  }
+  if (bic && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(bic)) {
+    fieldErrors.bic = 'Format BIC invalide (ex: BNPAFRPP).';
+  }
+  if (Object.keys(fieldErrors).length > 0) {
+    return { error: 'Vérifiez les champs.', fieldErrors, success: false };
+  }
+
+  try {
+    const refund = await prisma.refundRequest.findUnique({ where: { id: requestId } });
+    if (!refund) return { error: 'Demande introuvable.', success: false };
+
+    const newStatus = refund.status === RefundStatus.PENDING_AGENT_REVIEW
+      ? RefundStatus.CLIENT_VALIDATED
+      : refund.status; // for other statuses just save IBAN without changing status
+
+    await prisma.refundRequest.update({
+      where: { id: requestId },
+      data: { iban, bic, bankName, status: newStatus },
+    });
+
+    await createAuditLog(
+      requestId, 'client', 'Alice Wonder',
+      'Coordonnées bancaires fournies par le client',
+      refund.status, newStatus,
+      `IBAN: ${iban}${bic ? ` · BIC: ${bic}` : ''}`,
+    );
+
+    revalidateRelevantPaths(requestId);
+    revalidatePath('/agent');
+    return { success: true, message: 'Coordonnées bancaires enregistrées.' };
+  } catch (e) {
+    console.error('clientProvideIban error:', e);
+    return { error: 'Échec de l\'enregistrement. Réessayez.', success: false };
+  }
+}
+
 // clientUpdateDetailsAction remains largely the same, but its usage context has changed.
 // It's now primarily for DRAFT or RETURNED_TO_CLIENT_FOR_INFO statuses when details are updated standalone.
 export async function clientUpdateDetailsAction(prevState, formData) {

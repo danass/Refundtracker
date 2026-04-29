@@ -38,7 +38,7 @@ export async function agentApprove(prevState, formData) {
     const refund = await prisma.refundRequest.findUnique({ where: { id: refundRequestId } });
     if (!refund) return { error: 'Refund not found.' };
 
-    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) {
+    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS && refund.status !== RefundStatus.CLIENT_VALIDATED) {
       return { error: 'Action not allowed for current status.' };
     }
 
@@ -99,7 +99,7 @@ export async function agentEscalate(prevState, formData) {
     const refund = await prisma.refundRequest.findUnique({ where: { id: refundRequestId } });
     if (!refund) return { error: 'Refund not found.' };
 
-    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) {
+    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS && refund.status !== RefundStatus.CLIENT_VALIDATED) {
       return { error: 'Action not allowed for current status.' };
     }
     // No amount check here, escalation is the purpose
@@ -139,7 +139,7 @@ export async function agentRequestInfo(prevState, formData) {
     const refund = await prisma.refundRequest.findUnique({ where: { id: refundRequestId } });
     if (!refund) return { error: 'Refund not found.' };
 
-    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) {
+    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS && refund.status !== RefundStatus.CLIENT_VALIDATED) {
       return { error: 'Action not allowed for current status.' };
     }
 
@@ -178,7 +178,7 @@ export async function agentReject(prevState, formData) {
     const refund = await prisma.refundRequest.findUnique({ where: { id: refundRequestId } });
     if (!refund) return { error: 'Refund not found.' };
 
-    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS) {
+    if (refund.status !== RefundStatus.PENDING_AGENT_REVIEW && refund.status !== RefundStatus.RETURNED_TO_AGENT_FOR_EDITS && refund.status !== RefundStatus.CLIENT_VALIDATED) {
       return { error: 'Action not allowed for current status.' };
     }
 

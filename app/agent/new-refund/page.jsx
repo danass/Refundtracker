@@ -14,8 +14,8 @@ import Link from 'next/link';
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full bg-slate-700 hover:bg-slate-800 text-white">
-      {pending ? 'Creating Request...' : 'Create Refund Request'}
+    <Button type="submit" disabled={pending} className="w-full">
+      {pending ? 'Création en cours...' : 'Créer la demande de remboursement'}
     </Button>
   );
 }
@@ -56,85 +56,88 @@ export default function NewRefundPage() {
   }, [state, router]);
 
   return (
-    <div className="container mx-auto p-4 md:p-8 max-w-2xl">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-800">New Refund Request</h1>
-        <Link href="/agent" >
-          <Button variant="outline">&larr; Back to Dashboard</Button>
+    <div className="p-6 lg:p-8 max-w-2xl">
+      <div className="mb-6">
+        <Link href="/agent" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors mb-4">
+          ← Retour
         </Link>
+        <h1 className="text-2xl font-bold text-gray-900">Nouvelle demande de remboursement</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Remplir les informations du client et de la demande</p>
       </div>
-      <div className="bg-white shadow-lg rounded-lg p-6 md:p-8">
-        <form action={dispatch} className="space-y-6">
-          {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="bg-white border rounded-lg p-6" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+        <form action={dispatch} className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <Label htmlFor="clientFirstName" className="text-sm font-medium text-slate-700">Client First Name <span className="text-red-500">*</span></Label>
-              <Input id="clientFirstName" name="clientFirstName" required className="mt-1" />
+              <Label htmlFor="clientFirstName" className="text-xs font-medium text-gray-500 uppercase tracking-wide">Prénom <span className="text-red-500">*</span></Label>
+              <Input id="clientFirstName" name="clientFirstName" required className="mt-1.5" />
               {state.errors?.clientFirstName && <p className="text-xs text-red-500 mt-1">{state.errors.clientFirstName}</p>}
             </div>
             <div>
-              <Label htmlFor="clientLastName" className="text-sm font-medium text-slate-700">Client Last Name <span className="text-red-500">*</span></Label>
-              <Input id="clientLastName" name="clientLastName" required className="mt-1" />
+              <Label htmlFor="clientLastName" className="text-xs font-medium text-gray-500 uppercase tracking-wide">Nom <span className="text-red-500">*</span></Label>
+              <Input id="clientLastName" name="clientLastName" required className="mt-1.5" />
               {state.errors?.clientLastName && <p className="text-xs text-red-500 mt-1">{state.errors.clientLastName}</p>}
             </div>
           </div>
 
           <div>
-            <Label htmlFor="clientEmail" className="text-sm font-medium text-slate-700">Client Email <span className="text-red-500">*</span></Label>
-            <Input id="clientEmail" name="clientEmail" type="email" required className="mt-1" />
+            <Label htmlFor="clientEmail" className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email client <span className="text-red-500">*</span></Label>
+            <Input id="clientEmail" name="clientEmail" type="email" required className="mt-1.5" />
             {state.errors?.clientEmail && <p className="text-xs text-red-500 mt-1">{state.errors.clientEmail}</p>}
           </div>
 
           <div>
-            <Label htmlFor="zendeskTicketId" className="text-sm font-medium text-slate-700">Zendesk Ticket ID (Optional)</Label>
-            <Input id="zendeskTicketId" name="zendeskTicketId" className="mt-1" placeholder="e.g., 12345"/>
+            <Label htmlFor="zendeskTicketId" className="text-xs font-medium text-gray-500 uppercase tracking-wide">ID ticket Zendesk</Label>
+            <Input id="zendeskTicketId" name="zendeskTicketId" className="mt-1.5" placeholder="ex. 12345" />
             {state.errors?.zendeskTicketId && <p className="text-xs text-red-500 mt-1">{state.errors.zendeskTicketId}</p>}
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-                <Label htmlFor="amount" className="text-sm font-medium text-slate-700">Refund Amount <span className="text-red-500">*</span></Label>
-                <Input id="amount" name="amount" type="number" step="0.01" required className="mt-1" />
-                {state.errors?.amount && <p className="text-xs text-red-500 mt-1">{state.errors.amount}</p>}
+              <Label htmlFor="amount" className="text-xs font-medium text-gray-500 uppercase tracking-wide">Montant <span className="text-red-500">*</span></Label>
+              <Input id="amount" name="amount" type="number" step="0.01" required className="mt-1.5" />
+              {state.errors?.amount && <p className="text-xs text-red-500 mt-1">{state.errors.amount}</p>}
             </div>
             <div>
-                <Label htmlFor="currency" className="text-sm font-medium text-slate-700">Currency <span className="text-red-500">*</span></Label>
-                <select 
-                    id="currency" 
-                    name="currency" 
-                    required 
-                    className="mt-1 block w-full py-2 px-3 border border-slate-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm"
-                >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    {/* Add other currencies as needed */}
-                </select>
-                {state.errors?.currency && <p className="text-xs text-red-500 mt-1">{state.errors.currency}</p>}
+              <Label htmlFor="currency" className="text-xs font-medium text-gray-500 uppercase tracking-wide">Devise <span className="text-red-500">*</span></Label>
+              <select
+                id="currency"
+                name="currency"
+                required
+                className="mt-1.5 block w-full py-2 px-3 border rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                style={{ borderColor: 'hsl(220,13%,89%)' }}
+              >
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+                <option value="GBP">GBP</option>
+              </select>
+              {state.errors?.currency && <p className="text-xs text-red-500 mt-1">{state.errors.currency}</p>}
             </div>
           </div>
 
           <div>
-            <Label htmlFor="reason" className="text-sm font-medium text-slate-700">Reason for Refund <span className="text-red-500">*</span></Label>
-            <Textarea id="reason" name="reason" required rows={3} className="mt-1" />
+            <Label htmlFor="reason" className="text-xs font-medium text-gray-500 uppercase tracking-wide">Motif <span className="text-red-500">*</span></Label>
+            <Textarea id="reason" name="reason" required rows={3} className="mt-1.5" />
             {state.errors?.reason && <p className="text-xs text-red-500 mt-1">{state.errors.reason}</p>}
           </div>
 
-          {/* Payment Details - Keep it simple for now, can be expanded */}
-          <h4 className="text-md font-semibold text-slate-800 pt-4 border-t border-slate-200 mt-6 mb-2">Payment Details (Optional - Client may provide/edit)</h4>
-           <div>
-            <Label htmlFor="iban" className="text-sm font-medium text-slate-700">IBAN</Label>
-            <Input id="iban" name="iban" placeholder="DE00..." className="mt-1" />
-             {state.errors?.iban && <p className="text-xs text-red-500 mt-1">{state.errors.iban}</p>}
+          <div className="pt-4 border-t" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Coordonnées bancaires (optionnel)</p>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="iban" className="text-xs font-medium text-gray-500 uppercase tracking-wide">IBAN</Label>
+                <Input id="iban" name="iban" placeholder="FR76..." className="mt-1.5" />
+                {state.errors?.iban && <p className="text-xs text-red-500 mt-1">{state.errors.iban}</p>}
+              </div>
+              <div>
+                <Label htmlFor="bic" className="text-xs font-medium text-gray-500 uppercase tracking-wide">BIC/SWIFT</Label>
+                <Input id="bic" name="bic" placeholder="BANKDEFF..." className="mt-1.5" />
+                {state.errors?.bic && <p className="text-xs text-red-500 mt-1">{state.errors.bic}</p>}
+              </div>
+            </div>
           </div>
-           <div>
-            <Label htmlFor="bic" className="text-sm font-medium text-slate-700">BIC/SWIFT</Label>
-            <Input id="bic" name="bic" placeholder="BANKDEFF..." className="mt-1" />
-            {state.errors?.bic && <p className="text-xs text-red-500 mt-1">{state.errors.bic}</p>}
-          </div>
-          
+
           {state.error && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{state.error}</p>}
-          
+
           <SubmitButton />
         </form>
       </div>

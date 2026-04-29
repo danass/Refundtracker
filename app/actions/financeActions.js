@@ -185,6 +185,56 @@ export async function financeHandlePaymentError(prevState, formData) {
   }
 }
 
+// Finance Action: Reject — return the refund to the responsable for re-review
+export async function financeReject(prevState, formData) {
+  const refundRequestId = formData.get('refundRequestId');
+  const actorName = formData.get('actorName');
+  const financeNotes = formData.get('financeNotes');
+  const actorRole = 'finance';
+
+  if (!financeNotes || !financeNotes.trim()) {
+    return { error: 'Un motif est requis pour refuser un paiement.' };
+  }
+
+  try {
+    const refund = await prisma.refundRequest.findUnique({ where: { id: refundRequestId } });
+    if (!refund) return { error: 'Refund not found.' };
+    if (refund.status !== RefundStatus.APPROVED_FOR_PAYMENT) {
+      return { error: 'Le refus n\'est possible que sur un dossier "Approuvé à payer".' };
+    }
+
+    const previousStatus = refund.status;
+    const newStatus = RefundStatus.PENDING_LEAD_APPROVAL;
+
+    await prisma.refundRequest.update({
+      where: { id: refundRequestId },
+      data: {
+        status: newStatus,
+        financeNotes: refund.financeNotes
+          ? `${refund.financeNotes}\n[Refus paiement: ${financeNotes}]`
+          : `[Refus paiement: ${financeNotes}]`,
+      },
+    });
+
+    await createAuditLog(
+      refundRequestId,
+      actorRole,
+      actorName,
+      'Payment Rejected by Finance — Returned to Responsable',
+      previousStatus,
+      newStatus,
+      `Finance reject reason: ${financeNotes}`
+    );
+    revalidateRelevantPaths(refundRequestId, 'finance');
+    revalidateRelevantPaths(refundRequestId, 'lead');
+
+    return { success: true, message: 'Paiement refusé. Dossier renvoyé au responsable.' };
+  } catch (e) {
+    console.error('Finance reject error:', e);
+    return { error: 'Failed to reject payment.' };
+  }
+}
+
 export async function financeBulkMarkPaid(prevState, formData) {
   const selectedIdsString = formData.get('selectedIds');
   const actorName = formData.get('actorName') || 'Finance User';

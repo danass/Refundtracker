@@ -1,43 +1,30 @@
-// 'use client'; // This directive should be removed
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma.js';
 import { RefundStatus, UserRole } from '@prisma/client';
 import PaginationControls from '@/components/PaginationControls';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { getStatusLabel } from '@/lib/utils';
 import AgentTableBody from '@/components/dashboard/AgentTableBody';
 import FilterButton from '@/components/ui/FilterButton';
-// import { useRouter, useSearchParams } from 'next/navigation'; // Keep commented for Server Component
+import { Plus } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 10;
 
-// Helper function to get unique agents
 async function getAgents() {
   try {
     const agents = await prisma.user.findMany({
       where: { role: UserRole.AGENT },
-      select: {
-        id: true,
-        name: true, // Assuming a 'name' field
-        email: true // Fallback or primary identifier
-      },
-      orderBy: { name: 'asc' } // Or email, or another suitable field
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
     });
-    return agents.map(agent => ({
-      value: agent.id,
-      label: agent.name || agent.email // Use name if available, else email
-    }));
-  } catch (error) {
-    console.error("Failed to fetch agents:", error);
-    return []; // Return empty array on error to prevent crashes
+    return agents.map(agent => ({ value: agent.id, label: agent.name || agent.email }));
+  } catch {
+    return [];
   }
 }
 
-// AgentDashboard is a Server Component, so we cannot use client-side hooks like useRouter directly here.
-// The onValueChange handlers in FilterButton will use window.location.search for now.
 export default async function AgentDashboard({ searchParams: searchParamsInput }) {
-  // Await searchParams directly from props
   const searchParams = await searchParamsInput;
 
   let refundRequests = [];
@@ -46,29 +33,32 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
   const currentPage = Number(searchParams?.page) || 1;
   const searchQuery = searchParams?.q || '';
   const tab = searchParams?.tab || 'assigned';
-
-  // Filter values from searchParams
   const statusFilter = searchParams?.status || '';
-  const dateFilter = searchParams?.date || ''; // Placeholder, needs actual date handling
-  const amountFilter = searchParams?.amount || ''; // Placeholder, needs actual amount handling
+  const dateFilter = searchParams?.date || '';
+  const amountFilter = searchParams?.amount || '';
   const agentFilter = searchParams?.agent || '';
 
   const agents = await getAgents();
 
-  const statusOptions = Object.values(RefundStatus).map(status => ({ value: status, label: status.replace(/_/g, ' ') }));
-  // Placeholder options for Date and Amount - these would be more complex
+  // Counts for tab badges
+  const [countReady, countWaiting, countFlagged] = await Promise.all([
+    prisma.refundRequest.count({ where: { status: RefundStatus.CLIENT_VALIDATED } }),
+    prisma.refundRequest.count({ where: { status: RefundStatus.PENDING_AGENT_REVIEW } }),
+    prisma.refundRequest.count({ where: { isFlagged: true, OR: [{ status: RefundStatus.PENDING_AGENT_REVIEW }, { status: RefundStatus.CLIENT_VALIDATED }, { status: RefundStatus.RETURNED_TO_AGENT_FOR_EDITS }] } }),
+  ]);
+
+  const statusOptions = Object.values(RefundStatus).map(status => ({ value: status, label: getStatusLabel(status) }));
   const dateOptions = [
-    { value: 'today', label: 'Today' },
-    { value: 'this_week', label: 'This Week' },
-    { value: 'this_month', label: 'This Month' },
+    { value: 'today', label: "Aujourd'hui" },
+    { value: 'this_week', label: 'Cette semaine' },
+    { value: 'this_month', label: 'Ce mois' },
   ];
   const amountOptions = [
-    { value: '0-100', label: '$0 - $100' },
-    { value: '101-500', label: '$101 - $500' },
-    { value: '501+', label: '$501+' },
+    { value: '0-100', label: '0 € – 100 €' },
+    { value: '101-500', label: '101 € – 500 €' },
+    { value: '501+', label: '501 € et +' },
   ];
 
-  // Filtering logic
   const whereConditions = [];
 
   if (tab === 'assigned') {
@@ -76,11 +66,16 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
       OR: [
         { status: RefundStatus.PENDING_AGENT_REVIEW },
         { status: RefundStatus.RETURNED_TO_AGENT_FOR_EDITS },
+        { status: RefundStatus.CLIENT_VALIDATED },
       ],
     });
+  } else if (tab === 'ready') {
+    whereConditions.push({ status: RefundStatus.CLIENT_VALIDATED });
+  } else if (tab === 'waiting') {
+    whereConditions.push({ status: RefundStatus.PENDING_AGENT_REVIEW });
   } else if (tab === 'flagged') {
     whereConditions.push({ isFlagged: true });
-  } // For 'all' tab, no specific base condition is added to whereConditions
+  }
 
   if (searchQuery) {
     whereConditions.push({
@@ -93,19 +88,8 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
     });
   }
 
-  // Apply filters to whereConditions
-  if (statusFilter) {
-    whereConditions.push({ status: statusFilter });
-  }
-  // TODO: Implement proper date filtering based on dateFilter value
-  // if (dateFilter) { ... }
-  // TODO: Implement proper amount filtering based on amountFilter value
-  // if (amountFilter) { ... }
-  if (agentFilter) {
-    // This assumes you have an `agentId` or similar field on RefundRequest
-    // and that agentFilter value is the agent's ID.
-    whereConditions.push({ assignedAgentId: agentFilter }); 
-  }
+  if (statusFilter) whereConditions.push({ status: statusFilter });
+  if (agentFilter) whereConditions.push({ assignedAgentId: agentFilter });
 
   const finalWhere = whereConditions.length > 0 ? { AND: whereConditions } : {};
 
@@ -119,115 +103,110 @@ export default async function AgentDashboard({ searchParams: searchParamsInput }
     });
   } catch (err) {
     console.error('Database error fetching agent requests:', err);
-    error = 'Failed to load refund requests. Please try again later.';
+    error = 'Impossible de charger les demandes. Veuillez réessayer.';
   }
 
   if (error) {
-    return <p className="p-4 text-red-500">Error: {error}</p>;
+    return <p className="p-6 text-red-500">{error}</p>;
   }
 
+  const tabs = [
+    { id: 'ready',    label: 'IBAN reçu',       count: countReady,   dot: 'bg-emerald-400' },
+    { id: 'waiting',  label: 'En attente IBAN',  count: countWaiting, dot: 'bg-amber-400' },
+    { id: 'flagged',  label: 'Signalées',        count: countFlagged, dot: 'bg-red-400' },
+    { id: 'assigned', label: 'Toutes à traiter', count: null,         dot: null },
+    { id: 'all',      label: 'Toutes',           count: null,         dot: null },
+  ];
+
   return (
-    <div className="p-4 md:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-800">Agent Dashboard - Refunds</h1>
-        <Link href="/agent/new-refund" >
-          <Button variant="default" className="bg-slate-800 hover:bg-slate-900 text-white">
-            + New Refund Request
-          </Button>
+    <div className="p-6 lg:p-8">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Mes demandes</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Remboursements à traiter</p>
+        </div>
+        <Link
+          href="/agent/new-refund"
+          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-md shadow-sm transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Nouvelle demande
         </Link>
       </div>
-      <div className="flex space-x-1 border-b border-slate-200 mb-6">
-        <Button variant={tab === 'assigned' ? 'secondary' : 'ghost'} className={`py-2 px-3 h-auto rounded-none border-b-2 ${tab === 'assigned' ? 'border-slate-700 text-slate-800 font-semibold' : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-700'}`} asChild>
-          <Link href="?tab=assigned">Assigned to Me</Link>
-        </Button>
-        <Button variant={tab === 'flagged' ? 'secondary' : 'ghost'} className={`py-2 px-3 h-auto rounded-none border-b-2 ${tab === 'flagged' ? 'border-slate-700 text-slate-800 font-semibold' : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-700'}`} asChild>
-          <Link href="?tab=flagged">Flagged</Link>
-        </Button>
-        <Button variant={tab === 'all' ? 'secondary' : 'ghost'} className={`py-2 px-3 h-auto rounded-none border-b-2 ${tab === 'all' ? 'border-slate-700 text-slate-800 font-semibold' : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-700'}`} asChild>
-          <Link href="?tab=all">All Requests</Link>
-        </Button>
+
+      {/* Tabs */}
+      <div className="flex border-b mb-6 gap-1" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+        {tabs.map(t => (
+          <Link
+            key={t.id}
+            href={`?tab=${t.id}`}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === t.id
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.dot}`} />}
+            {t.label}
+            {t.count != null && t.count > 0 && (
+              <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                tab === t.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+              }`}>{t.count}</span>
+            )}
+          </Link>
+        ))}
       </div>
-      <div className="mb-6">
-        <form method="GET" action="/agent" className="flex gap-3 items-center mb-4">
+
+      {/* Search + Filters */}
+      <div className="mb-5 space-y-3">
+        <form method="GET" action="/agent" className="flex gap-2 items-center">
           <Input
             type="text"
             name="q"
             defaultValue={searchQuery}
-            placeholder="Search by client, ID..."
-            className="max-w-sm border-slate-300 focus:border-slate-500 focus:ring-slate-500"
+            placeholder="Rechercher par client, ID..."
+            className="max-w-xs"
           />
           {tab && <input type="hidden" name="tab" value={tab} />}
-          {/* Hidden inputs to carry over filter values on search submit */} 
           {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
           {dateFilter && <input type="hidden" name="date" value={dateFilter} />}
           {amountFilter && <input type="hidden" name="amount" value={amountFilter} />}
           {agentFilter && <input type="hidden" name="agent" value={agentFilter} />}
-
-          <Button type="submit" variant="outline" className="border-slate-300 text-slate-700 hover:bg-slate-50">
-            Search
-          </Button>
+          <Button type="submit" variant="outline" size="sm">Rechercher</Button>
         </form>
-        {/* Filter Buttons */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <FilterButton
-            label="Status"
-            options={statusOptions}
-            selectedValue={statusFilter}
-            paramName="status"
-          />
-          <FilterButton
-            label="Date"
-            options={dateOptions}
-            selectedValue={dateFilter}
-            paramName="date"
-          />
-          <FilterButton
-            label="Amount"
-            options={amountOptions}
-            selectedValue={amountFilter}
-            paramName="amount"
-          />
-          <FilterButton
-            label="Agent"
-            options={agents}
-            selectedValue={agentFilter}
-            paramName="agent"
-          />
+        <div className="flex flex-wrap gap-2">
+          <FilterButton label="Statut" options={statusOptions} selectedValue={statusFilter} paramName="status" />
+          <FilterButton label="Date" options={dateOptions} selectedValue={dateFilter} paramName="date" />
+          <FilterButton label="Montant" options={amountOptions} selectedValue={amountFilter} paramName="amount" />
+          <FilterButton label="Agent" options={agents} selectedValue={agentFilter} paramName="agent" />
         </div>
       </div>
-      {error && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
-          <p className="font-bold">Error</p>
-          <p>{error}</p>
+
+      {refundRequests.length === 0 && (
+        <div className="text-center py-16 bg-white rounded-lg border" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+          <p className="text-gray-400 text-sm">Aucune demande ne correspond aux filtres actuels.</p>
         </div>
       )}
-      {refundRequests.length === 0 && !error && (
-        <div className="text-center py-10 bg-white rounded-lg shadow">
-          <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h2 className="mt-2 text-lg font-medium text-slate-900">No Refund Requests Found</h2>
-          <p className="mt-1 text-sm text-slate-500">No requests match your current filters.</p>
-        </div>
-      )}
-      {refundRequests.length > 0 && !error && (
-        <div className="bg-white shadow-lg rounded-lg overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Client</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Refund ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Last Updated</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Risk Info</th>
+
+      {refundRequests.length > 0 && (
+        <div className="bg-white rounded-lg border overflow-x-auto" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b" style={{ borderColor: 'hsl(220,13%,89%)' }}>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Client</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Montant</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">IBAN</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Statut</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Mise à jour</th>
               </tr>
             </thead>
             <AgentTableBody refundRequests={refundRequests} simulatedRole="agent" />
           </table>
         </div>
       )}
+
       <PaginationControls totalItems={totalRequests} itemsPerPage={ITEMS_PER_PAGE} currentTab={tab} />
     </div>
   );
-} 
+}

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { RefundStatus } from '@prisma/client';
-import { getStatusVariant } from '@/lib/utils';
+import { getStatusVariant, getStatusLabel } from '@/lib/utils';
 
 export default function LeadTableBody({ refundRequests }) {
   const router = useRouter();
@@ -13,31 +13,26 @@ export default function LeadTableBody({ refundRequests }) {
   };
 
   return (
-    <tbody className="bg-white divide-y divide-slate-200">
-      {refundRequests.map((request) => (
-        <tr 
-          key={request.id} 
-          className="hover:bg-slate-50 transition-colors duration-150 cursor-pointer"
+    <tbody>
+      {refundRequests.map(request => (
+        <tr
+          key={request.id}
+          className="border-b cursor-pointer transition-colors hover:bg-gray-50"
+          style={{ borderColor: 'hsl(220,13%,89%)' }}
           onClick={() => handleRowClick(request.id)}
         >
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 hover:underline">
-            {request.ticketId || request.id}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-            {request.clientFirstName} {request.clientLastName}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+          <td className="px-4 py-3 text-sm font-medium text-gray-900">{request.ticketId || request.id}</td>
+          <td className="px-4 py-3 text-sm text-gray-600">{request.clientFirstName} {request.clientLastName}</td>
+          <td className="px-4 py-3 text-sm text-gray-600">
             {request.currency === 'USD' ? '$' : request.currency === 'EUR' ? '€' : request.currency === 'GBP' ? '£' : ''}
             {typeof request.amount === 'number' ? request.amount.toFixed(2) : 'N/A'}
           </td>
-          <td className="px-6 py-4 whitespace-nowrap">
+          <td className="px-4 py-3">
             <Badge variant={getStatusVariant(request.status)} className="text-xs">
-              {request.status ? request.status.replace(/_/g, ' ') : 'N/A'}
+              {getStatusLabel(request.status)}
             </Badge>
           </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-            {new Date(request.updatedAt).toLocaleString()}
-          </td>
+          <td className="px-4 py-3 text-sm text-gray-400">{new Date(request.updatedAt).toLocaleString()}</td>
         </tr>
       ))}
     </tbody>
